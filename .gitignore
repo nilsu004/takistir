@@ -1,21 +1,16 @@
-# Takıştır: technology stack is not selected yet.
-# Add framework-specific rules after the team decision.
-
-# Local secrets
+node_modules/
+dist/
+coverage/
 .env
 .env.*
 !.env.example
 !.env.sample
 .envrc
-
-# Operating system files
+*.log
 .DS_Store
 Thumbs.db
-
-# Temporary editor files and logs
 *.swp
 *.swo
 *~
-*.log
-
-# Track application source, migrations, tests and dependency lockfiles.
+.idea/
+uploads/
