@@ -25,6 +25,11 @@ The current `GET /api/health` endpoint returns:
 { "status": "ok", "service": "takistir-api" }
 ```
 
+The product/category SQL migration and database checks are in [`db/`](db/README.md).
+They target the PostgreSQL 17 setup on `SCRUM-39-database-setup`, which is not yet
+merged into `main`. See the [schema and data dictionary](../docs/product-category-schema.md)
+for the seed data contract. Applying the SQL does not connect the API to the database.
+
 For example, implement product retrieval and stock checks here; the frontend displays the returned data. Keep database credentials and secrets on the backend, and enforce permissions here even when the frontend already hides restricted actions.
 
 As features grow, split endpoints and business logic into focused modules rather than putting every feature in `app.js`. Keep server startup in `index.js`.
