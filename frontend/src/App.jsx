@@ -5,6 +5,8 @@ import { Cart, Catalog, Home, Info, Product, Wishlist } from './Storefront.jsx';
 import { Checkout, Confirmation } from './Checkout.jsx';
 import { Invoice, Login, Order, Orders, Profile } from './Account.jsx';
 
+import ProductManager from './manager/ProductManager.jsx';
+
 function Router() {
   const [hash, setHash] = useState(window.location.hash.slice(1) || '/');
   useEffect(() => {
@@ -22,6 +24,9 @@ function Router() {
   switch (section) {
     case undefined:
       page = <Home />;
+      break;
+    case 'product-manager':
+      page = <ProductManager />;
       break;
     case 'catalog':
       page = <Catalog key={hash} params={params} />;

@@ -19,7 +19,7 @@ export function Button({
 }
 
 export function Header() {
-  const { cart, user } = useStore();
+  const { cart, user, categories } = useStore();
   const [search, setSearch] = useState('');
   const count = cart.reduce((sum, item) => sum + item.qty, 0);
   return (
@@ -56,14 +56,7 @@ export function Header() {
         </nav>
       </div>
       <nav className="category-nav container" aria-label="Product categories">
-        {[
-          'New arrivals',
-          'Necklaces',
-          'Earrings',
-          'Rings',
-          'Bracelets',
-          'All accessories',
-        ].map((name) => (
+        {['New arrivals', ...categories, 'All accessories'].map((name) => (
           <a
             key={name}
             href={`#/catalog${['New arrivals', 'All accessories'].includes(name) ? '' : `?category=${name}`}`}
@@ -90,6 +83,8 @@ export function Footer() {
           <a href="#/info/returns">Delivery and returns</a>
           <span>·</span>
           <a href="#/info/privacy">Privacy</a>
+          <span>·</span>
+          <a href="#/product-manager">Product Manager demo</a>
         </nav>
         <button onClick={() => setChatOpen(true)}>Live chat ↗</button>
       </div>
