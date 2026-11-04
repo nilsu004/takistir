@@ -2,7 +2,7 @@
 
 An accessories e-commerce website for our CS308 course project, focused on watches and other accessories.
 
-We're using React and Vite for the frontend, and Node.js with Express for the backend. The basic setup is ready; store features and the database are still to be developed.
+We're using React and Vite for the frontend, and Node.js with Express for the backend. The project includes an interactive customer-facing frontend preview with sample data. PostgreSQL product and category schema files are available in [backend/db](backend/db/README.md); backend store APIs and the frontend's database integration are still to be developed. See [ONIZLEME.md](ONIZLEME.md) for the Turkish preview guide and current limitations.
 
 ## Team
 
@@ -24,7 +24,7 @@ npm ci
 npm run dev
 ```
 
-Open <http://127.0.0.1:5173>. Both the frontend and backend start with this command. The page should show **API connected**.
+Open <http://127.0.0.1:5173>. Both the frontend and backend start with this command. The preview uses sample data and does not require the backend. To run the preview on its own at port 5174, use `npm run dev --workspace frontend -- --port 5174`.
 
 Stop with `Ctrl+C`. Restart after changing backend code; frontend changes reload automatically. No `.env` file or database is needed for the current setup.
 
