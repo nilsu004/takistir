@@ -1,4 +1,6 @@
-import { app } from './app.js';
+import { createLocalApp } from './app.js';
+
+const { app, store } = createLocalApp();
 
 const port = Number(process.env.PORT ?? 3001);
 const host = process.env.HOST ?? '127.0.0.1';
@@ -26,7 +28,10 @@ server.on('error', (error) => {
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
-    server.close(() => process.exit(0));
+    server.close(() => {
+      store.close();
+      process.exit(0);
+    });
     setTimeout(() => process.exit(1), 5000).unref();
   });
 }

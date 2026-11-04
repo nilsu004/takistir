@@ -16,9 +16,10 @@
     "dev:backend": "npm run dev --workspace backend",
     "build": "npm run build --workspace frontend",
     "start": "npm run start --workspace backend",
-    "check": "node --check backend/src/app.js && node --check backend/src/index.js && npm run build && npm run format:check",
+    "check": "node --check backend/src/index.js && npm test && npm run build && npm run format:check",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test": "node --test backend/test/*.test.js frontend/src/manager/model.test.js"
   },
   "devDependencies": {
     "concurrently": "10.0.6",

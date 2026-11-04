@@ -14,3 +14,6 @@ Thumbs.db
 *~
 .idea/
 uploads/
+
+# Local integration database (contains accounts and sessions)
+backend/data/

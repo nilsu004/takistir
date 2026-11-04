@@ -26,8 +26,30 @@ const blankProduct = {
 };
 
 export default function ProductManager() {
-  const { products, orders, reviews } = useStore();
+  const { products, orders, reviews, user, busy } = useStore();
   const [tab, setTab] = useState(tabs[0]);
+  if (!user)
+    return (
+      <main className="container page">
+        <EmptyState
+          title="Sign in to access your workspace"
+          href="#/login?next=%2Fproduct-manager"
+          action="Sign in"
+        />
+      </main>
+    );
+  if (user.role !== 'product-manager')
+    return (
+      <main className="container page">
+        <EmptyState
+          title="Product Manager access required"
+          href="#/account"
+          action="Back to my account"
+        >
+          Your account does not have access to this workspace.
+        </EmptyState>
+      </main>
+    );
   return (
     <main className="container page manager-page">
       <div className="manager-heading">
@@ -43,9 +65,9 @@ export default function ProductManager() {
         </a>
       </div>
       <Notice>
-        Demo workspace · Changes are shared with the customer screens for this
-        session and reset on reload. No role authentication or backend storage
-        is connected.
+        Local integration · Changes are saved by the API and shared with
+        customer screens. Other sessions refresh automatically within a few
+        seconds.
       </Notice>
       <div className="manager-metrics" aria-label="Workspace summary">
         {[
@@ -79,12 +101,12 @@ export default function ProductManager() {
           </button>
         ))}
       </nav>
-      <div key={tab}>
+      <fieldset disabled={busy} className="manager-workspace" key={tab}>
         {tab === tabs[0] && <Products />}
         {tab === tabs[1] && <Categories />}
         {tab === tabs[2] && <Deliveries />}
         {tab === tabs[3] && <Reviews />}
-      </div>
+      </fieldset>
     </main>
   );
 }
@@ -136,8 +158,8 @@ function Products() {
           </p>
           <div className="manager-actions">
             <Button
-              onClick={() => {
-                removeProduct(removing.id);
+              onClick={async () => {
+                if (await removeProduct(removing.id)) return;
                 setRemoving(null);
                 if (editing?.id === removing.id) setEditing(null);
               }}
@@ -227,10 +249,10 @@ function ProductForm({ product, onClose }) {
         before purchase.
       </p>
       <form
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
           const values = Object.fromEntries(new FormData(e.currentTarget));
-          const result = saveProduct(
+          const result = await saveProduct(
             { ...values, stock: Number(values.stock) },
             product?.id,
           );
@@ -328,10 +350,10 @@ function Stock({ product }) {
   return (
     <form
       className="manager-stock"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
         setError(
-          updateStock(
+          await updateStock(
             product.id,
             Number(new FormData(e.currentTarget).get('stock')),
           ),
@@ -374,11 +396,12 @@ function Categories() {
       </p>
       <form
         className="panel manager-category-form"
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
-          const result = addCategory(new FormData(e.currentTarget).get('name'));
+          const form = e.currentTarget;
+          const result = await addCategory(new FormData(form).get('name'));
           setError(result);
-          if (!result) e.currentTarget.reset();
+          if (!result) form.reset();
         }}
       >
         <Field
@@ -400,9 +423,10 @@ function Categories() {
           <p>Remove the category “{removing}”?</p>
           <div className="manager-actions">
             <Button
-              onClick={() => {
-                setError(removeCategory(removing));
-                setRemoving(null);
+              onClick={async () => {
+                const error = await removeCategory(removing);
+                setError(error);
+                if (!error) setRemoving(null);
               }}
             >
               Remove category
@@ -575,10 +599,10 @@ function Deliveries() {
           </div>
           <form
             className="manager-category-form"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
               setError(
-                updateOrderStatus(
+                await updateOrderStatus(
                   order.id,
                   new FormData(e.currentTarget).get('status'),
                 ),

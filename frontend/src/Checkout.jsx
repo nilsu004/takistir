@@ -15,11 +15,11 @@ export function Checkout({ step }) {
         </EmptyState>
       </main>
     );
-  if (!user)
+  if (!user || user.role !== 'customer')
     return (
       <main className="container page">
         <EmptyState
-          title="Sign in to continue"
+          title="Sign in as a customer to continue"
           action="Sign in"
           href="#/login?next=%2Fcheckout%2Fdelivery"
         >
@@ -52,9 +52,9 @@ export function Checkout({ step }) {
             )}
             <form
               className="panel form-stack"
-              onSubmit={(event) => {
+              onSubmit={async (event) => {
                 event.preventDefault();
-                const order = placeOrder();
+                const order = await placeOrder();
                 if (order) navigate(`/confirmation/${order.id}`);
               }}
             >

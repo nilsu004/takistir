@@ -8,10 +8,12 @@ export function Button({
   className = '',
   ...props
 }) {
+  const { busy } = useStore();
   return (
     <button
       className={`button ${secondary ? 'button-secondary' : ''} ${className}`}
       {...props}
+      disabled={busy || props.disabled}
     >
       {children}
     </button>
@@ -51,6 +53,9 @@ export function Header() {
           <a href={user ? '#/account' : '#/login'}>
             {user ? 'My account' : 'My account'}
           </a>
+          {user?.role === 'product-manager' && (
+            <a href="#/product-manager">Management panel</a>
+          )}
           <a href="#/wishlist">♡ Wishlist</a>
           <a href="#/cart">Cart ({count})</a>
         </nav>
@@ -70,7 +75,7 @@ export function Header() {
 }
 
 export function Footer() {
-  const { setChatOpen } = useStore();
+  const { setChatOpen, user } = useStore();
   return (
     <footer className="site-footer">
       <div className="container footer-main">
@@ -83,8 +88,9 @@ export function Footer() {
           <a href="#/info/returns">Delivery and returns</a>
           <span>·</span>
           <a href="#/info/privacy">Privacy</a>
-          <span>·</span>
-          <a href="#/product-manager">Product Manager demo</a>
+          {user?.role === 'product-manager' && (
+            <a href="#/product-manager">Management panel</a>
+          )}
         </nav>
         <button onClick={() => setChatOpen(true)}>Live chat ↗</button>
       </div>

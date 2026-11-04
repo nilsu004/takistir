@@ -1,55 +1,31 @@
-# Takıştır frontend önizlemesi
+# Takıştır yerel ön izleme
 
-Bu sürüm, Takıştır projesinin örnek verilerle çalışan müşteri arayüzüdür. Backend API'lerine veya veritabanına bağlanmadan incelenebilir.
-
-## Açılış
-
-Projenin ana klasörünü Terminal'de aç. İlk kurulumda bağımlılıkları yükle:
+Node.js 24+ ile proje ana klasöründe:
 
 ```sh
 npm ci
+npm run dev
 ```
 
-Önizlemeyi başlat:
+`http://127.0.0.1:5173` adresini aç. Frontend ve API birlikte çalışmalıdır; yalnız frontend artık bağımsız demo veri kaynağı kullanmaz.
 
-```sh
-npm run dev --workspace frontend -- --port 5174
-```
+## Müşteri ve yönetici girişi
 
-Tarayıcıda <http://127.0.0.1:5174> adresini aç. Sunucuyu durdurmak için `Ctrl+C` kullan. Frontend değişiklikleri otomatik olarak yansır.
+**My account → Local test accounts** bölümünden müşteri veya Product Manager test hesabını seç. İki rolü aynı anda denemek için normal pencere ile gizli pencereyi veya ayrı tarayıcı profillerini kullan; normal sekmeler oturum çerezini paylaşır.
 
-## Neleri inceleyebilirsin?
+| Hesap           | E-posta                | Parola          |
+| --------------- | ---------------------- | --------------- |
+| Customer        | deniz@example.com      | CustomerDemo!24 |
+| Product Manager | manager@takistir.local | ManagerDemo!24  |
 
-- Ana sayfa, kategori listesi, isim/açıklama arama, fiyat/popülerlik sıralaması.
-- Ürün detayı, stock bilgisi, quantity seçimi, wishlist ve cart.
-- Login / registration görünümü; **Use demo account** ile şifre yazmadan devam edebilirsin.
-- Delivery address → mock payment → order confirmation → invoice.
-- Payment sayfasındaki **Preview payment error** bölümünden başarısız ödeme görünümü.
-- Profile, order history; Processing siparişi iptal etme, Delivered siparişin seçili ürün ve adetleri için return request.
-- Teslim edilmiş örnek alışverişin ürününde rating / review formu.
-- Live chat görünümü; örnek mesajlar ve dosya adı önizlemesi.
-- Telefon genişliğine uyarlanan yerleşim.
+Yönetici girişinden sonra panel açılır. Panelden **View storefront**, müşteri görünümünden yetkili hesapla **Management panel** bağlantıları kullanılabilir. Katalog, stok, sipariş durumu ve yorum onayları ortak API'den gelir; diğer oturumlar yaklaşık üç saniyede güncellenir. Veriler `backend/data/local.sqlite` içinde kalır ve yeniden başlatmada korunur. Veritabanı Git'e gönderilmez.
 
-Başlangıç sepetinde iki ürün var. Orders sayfasında üç örnek sipariş var; bu sayede farklı durumları deneyebilirsin. İade örnekleri için kullanılan tarih **1 November 2026**.
+## İncelenebilen akışlar
 
-## Bu sürümün sınırı
+Müşteri tarafında katalog/arama/sıralama, ürün detayları, sepet/wishlist, giriş/kayıt/profil, mock checkout, sipariş geçmişi, iptal/iade talebi, teslim edilen ürün yorumu ve fatura görünümü bulunur. Product Manager tarafında ürün/kategori/stok yönetimi, sipariş/teslimat ve yorum moderasyonu vardır. Yeni ürünler Sales Manager fiyat atamasını bekler.
 
-Bu bir **frontend inceleme sürümü**. Gerçek kullanıcı doğrulama, database, ödeme, email, dosya yükleme, gerçek zamanlı chat ve manager panelleri bağlanmadı. Parola ve kart alanları saklanmaz veya sunucuya gönderilmez. Cart ve wishlist tarayıcının localStorage alanında kalır; diğer değişiklikler sayfa yenilenince sıfırlanır.
+Gerçek ödeme alınmaz. Kart numarası ve güvenlik kodu API'ye gönderilmez. Gerçek kargo, e-posta/PDF fatura servisi, refund işlemi, Sales Manager ve Support Agent backend akışları kapsam dışıdır. Live chat mevcut frontend demosudur. Local SQLite adaptörü PostgreSQL şemasına bağlı değildir; production modunda başlatılamaz.
 
-Figma'nın **Home** ve **Product details** ekranlarından tasarım bilgisi ve özgün SVG görseller alındı. Diğer ekranları okurken Figma araç kotası doldu; ek akışlar aynı renk/font/component diliyle kodlandı. Dolayısıyla bu çalışma tüm Figma ekranlarının birebir aktarımı değildir.
+Figma'nın Home ve Product details ekranlarının tasarım dili korunmuştur. Diğer müşteri ekranları aynı renk/font/bileşen yaklaşımıyla hazırlanmıştır; tüm Figma ekranlarının birebir aktarımı değildir.
 
-## Kod nerede?
-
-| Dosya                         | İçerik                                            |
-| ----------------------------- | ------------------------------------------------- |
-| `frontend/src/App.jsx`        | Sayfa yönlendirmesi                               |
-| `frontend/src/components.jsx` | Header, footer, product card, form alanları, chat |
-| `frontend/src/Storefront.jsx` | Home, catalog, product, cart, wishlist            |
-| `frontend/src/Checkout.jsx`   | Delivery, payment, confirmation                   |
-| `frontend/src/Account.jsx`    | Login, profile, orders, return request, invoice   |
-| `frontend/src/Store.jsx`      | Ortak demo state ve işlemler                      |
-| `frontend/src/data.js`        | Örnek ürünler ve siparişler                       |
-| `frontend/src/styles.css`     | Renkler, fontlar, desktop / mobile stilleri       |
-| `frontend/public/assets/`     | Yerel SVG görseller ve fontlar                    |
-
-Build kontrolü: `npm run build`.
+Test: `npm run check`. Ayrıntılı senaryo ve sınırlar: `PRODUCT_MANAGER_DEMO.md`, `backend/README.md`.

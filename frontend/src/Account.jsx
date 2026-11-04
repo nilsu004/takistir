@@ -10,16 +10,21 @@ import { displayDate, money, navigate, returnEligible } from './data.js';
 import { useStore } from './Store.jsx';
 
 export function Login({ register = false, next = '/account' }) {
-  const { setUser, setToast } = useStore();
+  const { login, busy } = useStore();
+  const [error, setError] = useState('');
   const destination =
     next.startsWith('/') && !next.startsWith('//') ? next : '/account';
-  function demoLogin() {
-    setUser({
-      name: 'Deniz Yılmaz',
-      email: 'deniz@example.com',
-      home: 'İstanbul',
-    });
-    navigate(destination);
+  async function signIn(email, password, name) {
+    const result = await login(email, password, name);
+    setError(result.error);
+    if (!result.error)
+      navigate(
+        result.state.user.role === 'product-manager'
+          ? '/product-manager'
+          : destination === '/product-manager'
+            ? '/account'
+            : destination,
+      );
   }
   return (
     <main className="container page auth-page">
@@ -27,28 +32,29 @@ export function Login({ register = false, next = '/account' }) {
         <p className="eyebrow">Takıştır account</p>
         <h1>{register ? 'Create an account' : 'Welcome back'}</h1>
         <p className="muted">
-          Sign in to view your orders and continue checkout.
+          Sign in to continue to your account or workspace.
         </p>
-        <Notice>
-          Frontend preview. Use the demo account to explore; no real account is
-          created.
-        </Notice>
+        {error && <Notice error>{error}</Notice>}
         <form
           className="form-stack"
-          onSubmit={(event) => {
+          onSubmit={async (event) => {
             event.preventDefault();
             const data = new FormData(event.currentTarget);
-            setUser({
-              name: data.get('name') || 'Deniz Yılmaz',
-              email: data.get('email'),
-              home: '',
-            });
-            setToast('Demo session started.');
-            navigate(destination);
+            await signIn(
+              data.get('email'),
+              data.get('password'),
+              register ? data.get('name') : undefined,
+            );
           }}
         >
           {register && (
-            <Field label="Full name" name="name" autoComplete="name" required />
+            <Field
+              label="Full name"
+              name="name"
+              autoComplete="name"
+              required
+              maxLength={160}
+            />
           )}
           <Field
             label="Email"
@@ -57,6 +63,7 @@ export function Login({ register = false, next = '/account' }) {
             autoComplete="email"
             placeholder="deniz@example.com"
             required
+            maxLength={254}
           />
           <Field
             label="Password"
@@ -64,15 +71,36 @@ export function Login({ register = false, next = '/account' }) {
             type="password"
             autoComplete={register ? 'new-password' : 'current-password'}
             minLength={8}
+            maxLength={128}
             required
           />
-          <Button type="submit">
-            {register ? 'Create demo account' : 'Sign in'}
-          </Button>
-          <Button secondary type="button" onClick={demoLogin}>
-            Use demo account
+          <Button type="submit" disabled={busy}>
+            {busy ? 'Please wait…' : register ? 'Create account' : 'Sign in'}
           </Button>
         </form>
+        <details className="preview-tools">
+          <summary>Local test accounts</summary>
+          <p>
+            Use separate browser profiles or an incognito window to test both
+            roles at once.
+          </p>
+          <div className="form-stack">
+            <Button
+              secondary
+              disabled={busy}
+              onClick={() => signIn('deniz@example.com', 'CustomerDemo!24')}
+            >
+              Use customer demo
+            </Button>
+            <Button
+              secondary
+              disabled={busy}
+              onClick={() => signIn('manager@takistir.local', 'ManagerDemo!24')}
+            >
+              Use Product Manager demo
+            </Button>
+          </div>
+        </details>
         <p className="auth-switch">
           {register ? 'Already have an account?' : 'New to Takıştır?'}{' '}
           <a
@@ -87,7 +115,7 @@ export function Login({ register = false, next = '/account' }) {
 }
 
 export function AccountShell({ children, active }) {
-  const { user, setUser, setToast } = useStore();
+  const { user, logout } = useStore();
   if (!user)
     return (
       <main className="container page">
@@ -114,6 +142,9 @@ export function AccountShell({ children, active }) {
               ['Profile', '/account'],
               ['Orders', '/orders'],
               ['Wishlist', '/wishlist'],
+              ...(user.role === 'product-manager'
+                ? [['Management panel', '/product-manager']]
+                : []),
             ].map(([label, url]) => (
               <a
                 key={url}
@@ -124,10 +155,8 @@ export function AccountShell({ children, active }) {
               </a>
             ))}
             <button
-              onClick={() => {
-                setUser(null);
-                setToast('Signed out. Your cart and wishlist have been kept.');
-                navigate('/');
+              onClick={async () => {
+                if (!(await logout())) navigate('/');
               }}
             >
               Log out
@@ -141,26 +170,24 @@ export function AccountShell({ children, active }) {
 }
 
 export function Profile() {
-  const { user, setUser, setToast } = useStore();
+  const { user, updateProfile, busy } = useStore();
   return (
     <AccountShell active="Profile">
       <h1>Profile</h1>
       {user && (
         <form
           className="panel form-stack"
-          onSubmit={(event) => {
+          onSubmit={async (event) => {
             event.preventDefault();
             const data = new FormData(event.currentTarget);
-            setUser({
-              ...user,
+            await updateProfile({
               name: data.get('name'),
               email: data.get('email'),
               home: data.get('home'),
             });
-            setToast('Profile updated for this preview session.');
           }}
         >
-          <p className="muted">Customer ID: C-102</p>
+          <p className="muted">Account ID: {user.id}</p>
           <Field
             label="Full name"
             name="name"
@@ -182,7 +209,9 @@ export function Profile() {
             defaultValue={user.home}
             autoComplete="street-address"
           />
-          <Button type="submit">Save changes</Button>
+          <Button type="submit" disabled={busy}>
+            Save changes
+          </Button>
         </form>
       )}
     </AccountShell>
@@ -365,19 +394,17 @@ export function Order({ id }) {
       {returnOpen && eligible && !order.returnRequest && (
         <form
           className="panel form-stack"
-          onSubmit={(event) => {
+          onSubmit={async (event) => {
             event.preventDefault();
-            const data = new FormData(event.currentTarget);
+            const form = event.currentTarget;
+            const data = new FormData(form);
             const selected = Object.fromEntries(
               order.items
                 .filter((item) => data.has(item.id))
                 .map((item) => [item.id, Number(data.get(`${item.id}-qty`))]),
             );
-            if (requestReturn(id, selected)) setReturnOpen(false);
-            else
-              event.currentTarget
-                .querySelector('input[type="checkbox"]')
-                ?.focus();
+            if (await requestReturn(id, selected)) setReturnOpen(false);
+            else form.querySelector('input[type="checkbox"]')?.focus();
           }}
         >
           <h2>Select items to return</h2>

@@ -76,3 +76,15 @@ test('pending, rejected and other-product ratings never affect published average
   );
   assert.equal(publishedRating({ id: 'new' }, []).count, 0);
 });
+
+test('return windows include new deliveries and day 30, but exclude future, old and undelivered orders', async () => {
+  const { returnEligible } = await import('../../../shared/order-rules.js');
+  const now = new Date('2026-11-04T01:00:00Z');
+  const eligible = (date, status = 'Delivered') =>
+    returnEligible({ date, status }, now);
+  assert.equal(eligible('2026-11-04'), true);
+  assert.equal(eligible('2026-10-05'), true);
+  assert.equal(eligible('2026-10-04'), false);
+  assert.equal(eligible('2026-11-05'), false);
+  assert.equal(eligible('2026-11-04', 'Processing'), false);
+});

@@ -1,36 +1,31 @@
-# Product Manager demo
+# Product Manager integration
 
-Open `http://127.0.0.1:5174/#/product-manager` while the frontend is running on port 5174. The storefront footer also includes a **Product Manager demo** link.
+Start **both services** with `npm run dev` at the repository root. Open `http://127.0.0.1:5173/#/login` and expand **Local test accounts**. Product Manager login opens `#/product-manager`; customer login opens My account (or continues checkout). The management link is shown only to managers. Customer or guest navigation directly to the workspace is blocked; the API independently checks each role.
 
-```sh
-npm run dev --workspace frontend -- --port 5174
-```
+## Try the shared flow locally
 
-The panel reuses the storefront's fonts, colors, Button, Field, Notice and EmptyState components. Manager screens and responsive styles live in `frontend/src/manager/`; shared actions live in `frontend/src/Store.jsx`.
+1. In a normal browser window, sign in with **Use Product Manager demo**.
+2. In an incognito window or another browser profile, open the same URL and choose **Use customer demo**. Ordinary tabs share the same login cookie.
+3. Change a product name, warranty, distributor or stock in the panel. The customer catalog/detail page refreshes within three seconds or when focused. Add/remove an empty category and check the navigation/filter.
+4. Create a product with all required fields. It appears as **Price pending** and is not purchasable. Existing sale prices are read-only; pricing and discounts remain Sales Manager responsibilities.
+5. Open **Orders & deliveries**, select an order and advance Processing → In transit → Delivered. Confirm the same status in the customer's order history. Review delivery/customer/product IDs, quantities, paid totals, address and invoice.
+6. In **Review moderation**, approve/reject a pending review. Only approved comments and star ratings appear publicly. Customer reviews require a delivered purchase verified by the API.
+7. Complete customer mock checkout with sample card values. Card fields never leave the payment form. The API stores the order, snapshots prices, decreases stock and makes it visible to the manager. Cancel a Processing order to restore its reserved stock once.
+8. Reload both windows or restart the API: manager changes and orders remain in the local SQLite database. Remove a product and confirm historical invoices still retain its original name and price.
 
-## Demo flows
+## Architecture and boundaries
 
-- Products: add, edit, remove, search and update stock. Required fields include ID, name, model, serial, description, category, stock, warranty and distributor. IDs are immutable and cannot be reused after removal. Serial numbers are unique. Removal asks for confirmation, removes the product from customer browsing/cart/wishlist, and retains historical order/invoice snapshots.
-- Categories: add a category and see it in the storefront navigation and filters. Remove an empty category; populated categories require moving/removing products first.
-- Prices: existing sale prices are read-only and preserved during editing. New products show **Price pending**, remain visible, and cannot be purchased until Sales Manager pricing is connected. The manager actions ignore supplied price fields. No discounts or Sales Manager screens were added.
-- Orders & deliveries: inspect order and delivery IDs, customer ID, address, product IDs, quantities, paid unit/line totals, tracking reference, completion and a read-only demo invoice. Advance Processing → In transit → Delivered. Delivered and Cancelled are terminal. Customer order history uses the same state. Purchase-time names, illustrations and paid prices remain available after catalog edits/removal.
-- Reviews: a seeded pending review for Aurea Hoop Earrings can be approved or rejected immediately. Alternatively, use the customer demo account, open a delivered purchase and submit a review. Approvals publish both comment and stars; rejections publish neither. The customer product page reflects moderation without reloading.
+Manager screens and responsive styles live in `frontend/src/manager/`. Existing fonts, colors and common UI components are retained. `Store.jsx` is now an API client/cache, not a second source of inventory/order data. Validation and rating rules shared by frontend/backend live in `shared/`. `backend/src/service.js` enforces business rules; `store.js` provides the local transactional SQLite adapter; `app.js` handles HTTP/session/role boundaries.
 
-## Limits and requirement interpretation
+This is a local integration, not production deployment or PostgreSQL integration. SQLite stores a JSON application snapshot and sessions. Known seeded credentials are restricted to local mode; startup refuses production mode. Cart/wishlist remain browser-local. Cross-session data refreshes through polling, not WebSockets. No Sales Manager, Support Agent, real payment, refund approval or invoice email/PDF service was added. Read-only invoice views and the existing browser print flow remain demo documents.
 
-This is a browser-only, single-session demo. Products, categories, stock, orders and moderation reset on reload. Only the pre-existing cart and wishlist persist in localStorage. Changes propagate while navigating within the same app instance; other tabs/devices are not synchronized.
+Both star ratings and comments require moderation as requested. Course requirement 5 instead specifies immediate publication of stars. Seeded historical aggregate ratings are treated as already approved. Seed order addresses/tracking are fixtures, and their inventory was not reserved; cancelling a seed order does not invent stock.
 
-The backend currently exposes only a health endpoint. No real role authentication, authorization, database persistence, concurrent inventory transactions, delivery integration, image uploads, invoice generation/email or payment processing is implemented here. The panel is openly labeled a demo and uses the same single customer (`CU-001`) as the existing customer flows. Delivery addresses and tracking references are fixtures; new orders use the entered checkout address. Product illustration choices reuse local assets.
+## Validation
 
-`docs/requirements.md` requirement 5 calls for immediate star publication and moderated comments. This implementation follows the explicit request for this change: **both stars and comments require approval**. Existing aggregate seed ratings are treated as previously approved demo history. Sales Manager, Support Agent and unrelated customer feature gaps remain outside this change.
+- `npm test`: HTTP tests cover session cookies, login/logout, role and ownership boundaries, protected request origins, CRUD/category guards, stock validation, protected pricing, server-priced/idempotent checkout, concurrent last-unit purchases, cancellation, delivery transitions, review eligibility/moderation and database reopening. Shared rule tests cover input validation and published rating calculations.
+- `npm run check`: all tests, production frontend build and repository formatting.
+- A temporary React test-renderer harness exercised login redirects, actual async manager forms, role gates, customer catalog/reviews/history, checkout and focus refresh against a real isolated local HTTP API. Its dependency was installed only under `/private/tmp`.
+- Automated Chrome access timed out, so visual browser QA is not claimed. Responsive styles remain available for manual inspection.
 
-## Verification
-
-```sh
-node --test frontend/src/manager/model.test.js
-npm run check
-```
-
-The model tests cover required product fields, stock boundaries, category validity, archived ID/serial uniqueness, order transitions and exclusion of pending/rejected ratings. A temporary React state integration check also exercised every manager section, product/category mutations, read-only pricing, checkout after stock changes, review eligibility/moderation, customer publication and order/invoice snapshots after removal. It installed its test renderer only under `/private/tmp`; no project dependency was added.
-
-Responsive CSS supports a single-column editor and horizontally scrollable data tables on narrow screens. No visual browser QA was available through the connected browser tool in this session.
+See `backend/README.md` for account credentials, routes, storage details and limits.

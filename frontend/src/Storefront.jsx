@@ -154,7 +154,7 @@ export function Product({ id }) {
     );
   const saved = wishlist.includes(id);
   const eligible =
-    user &&
+    user?.role === 'customer' &&
     orders.some(
       (order) =>
         order.status === 'Delivered' &&
@@ -245,10 +245,10 @@ export function Product({ id }) {
         {reviewOpen && (
           <form
             className="panel review-form"
-            onSubmit={(event) => {
+            onSubmit={async (event) => {
               event.preventDefault();
               const data = new FormData(event.currentTarget);
-              const error = submitReview(
+              const error = await submitReview(
                 id,
                 Number(data.get('rating')),
                 String(data.get('comment')),
@@ -304,12 +304,16 @@ export function Product({ id }) {
             </tbody>
           </table>
         </div>
-        {user && ownReviews.some((review) => review.status === 'Pending') && (
-          <p className="muted">
-            Your rating and comment are awaiting approval and are not published
-            yet.
-          </p>
-        )}
+        {user &&
+          ownReviews.some(
+            (review) =>
+              review.status === 'Pending' && review.customerId === user.id,
+          ) && (
+            <p className="muted">
+              Your rating and comment are awaiting approval and are not
+              published yet.
+            </p>
+          )}
       </section>
     </main>
   );
@@ -418,7 +422,7 @@ export function Info({ section }) {
     ],
     privacy: [
       'Privacy',
-      'This local preview keeps only your cart and wishlist in this browser. Forms do not send payment details or passwords to a server.',
+      'Your cart and wishlist are stored in this browser. Account credentials are verified by the local API. Card details are never sent to or stored by the API.',
     ],
   }[section];
   if (!content)
