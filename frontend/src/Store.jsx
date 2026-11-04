@@ -6,6 +6,12 @@ import {
   returnEligible,
 } from './data.js';
 
+import {
+  canTransition,
+  initialCategories,
+  validateProduct,
+} from './manager/model.js';
+
 const StoreContext = createContext(null);
 const defaultCart = [
   { id: 'TK-001', qty: 1 },
@@ -44,13 +50,214 @@ export function StoreProvider({ children }) {
         Array.isArray(v) && v.every((id) => catalog.some((p) => p.id === id)),
     ),
   );
-  const [products, setProducts] = useState(catalog);
-  const [orders, setOrders] = useState(initialOrders);
+  const [products, setProducts] = useState(() =>
+    catalog.map((p) => ({
+      ...p,
+      warranty: '2 years',
+      distributor: 'Takıştır',
+      ratingCount: p.popularity,
+    })),
+  );
+  const [orders, setOrders] = useState(() =>
+    initialOrders.map((o) => ({
+      ...o,
+      customerId: 'CU-001',
+      address:
+        'Deniz Yılmaz · Örnek Mah. Demo Sok. No: 12, Kadıköy, İstanbul 34710',
+      deliveryId: `DL-${o.id}`,
+      items: o.items.map((item) => ({
+        ...item,
+        name: catalog.find((p) => p.id === item.id).name,
+        image: catalog.find((p) => p.id === item.id).image,
+      })),
+    })),
+  );
   const [user, setUser] = useState(null);
   const [address, setAddress] = useState(null);
   const [toast, setToast] = useState('');
   const [chatOpen, setChatOpen] = useState(false);
-  const [reviews, setReviews] = useState([]);
+  const [categories, setCategories] = useState(initialCategories);
+  const [reviews, setReviews] = useState([
+    {
+      id: 'RV-PUBLISHED',
+      productId: 'TK-001',
+      customerId: 'CU-SEED',
+      author: 'A',
+      rating: 5,
+      comment: 'Elegant and suitable for everyday wear.',
+      status: 'Approved',
+    },
+    {
+      id: 'RV-DEMO',
+      productId: 'TK-002',
+      customerId: 'CU-001',
+      author: 'Deniz Yılmaz',
+      rating: 5,
+      comment: 'Lovely pearl detail and comfortable to wear.',
+      status: 'Pending',
+    },
+  ]);
+
+  function saveProduct(draft, editingId) {
+    draft = Object.fromEntries(
+      Object.entries(draft).map(([key, value]) => [
+        key,
+        typeof value === 'string' ? value.trim() : value,
+      ]),
+    );
+    const error = validateProduct(draft, products, categories, editingId);
+    if (error) return error;
+    const original = products.find((p) => p.id === editingId);
+    if (editingId && (!original || original.archived))
+      return 'Product is no longer available.';
+    // Prices and campaigns are never accepted from the manager form.
+    const {
+      id,
+      name,
+      category,
+      model,
+      serial,
+      description,
+      warranty,
+      distributor,
+      material,
+      stock,
+      image,
+    } = draft;
+    const fields = {
+      id,
+      name,
+      category,
+      model,
+      serial,
+      description,
+      warranty,
+      distributor,
+      material,
+      stock,
+      image,
+    };
+    setProducts((rows) =>
+      editingId
+        ? rows.map((p) =>
+            p.id === editingId
+              ? {
+                  ...p,
+                  ...fields,
+                  detailImage:
+                    p.image === fields.image ? p.detailImage : undefined,
+                }
+              : p,
+          )
+        : [
+            ...rows,
+            {
+              ...fields,
+              price: null,
+              rating: 0,
+              ratingCount: 0,
+              popularity: 0,
+              collection: 'New arrivals',
+            },
+          ],
+    );
+    setToast(
+      editingId
+        ? 'Product updated.'
+        : 'Product added. Sales Manager pricing is pending.',
+    );
+    return '';
+  }
+  function removeProduct(id) {
+    setProducts((rows) =>
+      rows.map((p) => (p.id === id ? { ...p, archived: true } : p)),
+    );
+    setCart((rows) => rows.filter((item) => item.id !== id));
+    setWishlist((rows) => rows.filter((item) => item !== id));
+    setToast(
+      'Product removed from the storefront. Order records are retained.',
+    );
+  }
+  function updateStock(id, stock) {
+    if (!Number.isSafeInteger(stock) || stock < 0 || stock > 1000000)
+      return 'Enter a whole number between 0 and 1,000,000.';
+    if (!products.some((p) => p.id === id && !p.archived))
+      return 'Product not found.';
+    setProducts((rows) => rows.map((p) => (p.id === id ? { ...p, stock } : p)));
+    setToast('Stock updated. Existing carts are checked again at checkout.');
+    return '';
+  }
+  function addCategory(name) {
+    const value = name.trim();
+    if (!value || value.length > 60)
+      return 'Enter a category name of 1–60 characters.';
+    if (
+      ['All accessories', 'New arrivals', ...categories].some(
+        (c) => c.toLowerCase() === value.toLowerCase(),
+      )
+    )
+      return 'This category name is already used or reserved.';
+    setCategories((rows) => [...rows, value]);
+    setToast('Category added.');
+    return '';
+  }
+  function removeCategory(name) {
+    if (products.some((p) => !p.archived && p.category === name))
+      return 'Move or remove products in this category first.';
+    setCategories((rows) => rows.filter((c) => c !== name));
+    setToast('Category removed.');
+    return '';
+  }
+  function updateOrderStatus(id, status) {
+    const order = orders.find((o) => o.id === id);
+    if (!order || !canTransition(order.status, status))
+      return 'Orders must move from Processing to In transit, then Delivered.';
+    setOrders((rows) => rows.map((o) => (o.id === id ? { ...o, status } : o)));
+    setToast(`Order ${id}: ${status}.`);
+    return '';
+  }
+  function submitReview(productId, rating, comment) {
+    if (
+      !user ||
+      !orders.some(
+        (o) =>
+          o.status === 'Delivered' && o.items.some((i) => i.id === productId),
+      )
+    )
+      return 'Only delivered purchases can be reviewed.';
+    if (
+      !products.some((p) => p.id === productId && !p.archived) ||
+      !Number.isInteger(rating) ||
+      rating < 1 ||
+      rating > 5 ||
+      !comment.trim() ||
+      comment.trim().length > 500
+    )
+      return 'Enter a rating and a comment of 1–500 characters.';
+    setReviews((rows) => [
+      ...rows,
+      {
+        id: crypto.randomUUID(),
+        productId,
+        customerId: 'CU-001',
+        author: user.name,
+        rating,
+        comment: comment.trim(),
+        status: 'Pending',
+      },
+    ]);
+    setToast('Your rating and comment are awaiting Product Manager approval.');
+    return '';
+  }
+  function moderateReview(id, status) {
+    if (!['Approved', 'Rejected'].includes(status)) return;
+    setReviews((rows) =>
+      rows.map((r) =>
+        r.id === id && r.status === 'Pending' ? { ...r, status } : r,
+      ),
+    );
+    setToast(`Review ${status.toLowerCase()}.`);
+  }
 
   useEffect(() => {
     try {
@@ -72,7 +279,14 @@ export function StoreProvider({ children }) {
   function addToCart(id, qty = 1) {
     const product = products.find((p) => p.id === id);
     const existing = cart.find((item) => item.id === id)?.qty || 0;
-    if (!product || qty < 1 || existing + qty > product.stock) {
+    if (
+      !product ||
+      product.archived ||
+      product.price === null ||
+      !Number.isInteger(qty) ||
+      qty < 1 ||
+      existing + qty > product.stock
+    ) {
       setToast('The requested quantity is not available.');
       return;
     }
@@ -91,7 +305,12 @@ export function StoreProvider({ children }) {
       setCart((items) => items.filter((item) => item.id !== id));
       return;
     }
-    if (qty > product.stock) {
+    if (
+      !product ||
+      product.archived ||
+      !Number.isInteger(qty) ||
+      qty > product.stock
+    ) {
       setToast('No more stock is available.');
       return;
     }
@@ -108,7 +327,14 @@ export function StoreProvider({ children }) {
     if (!user || !address || !cart.length) return null;
     if (
       cart.some(
-        (item) => item.qty > products.find((p) => p.id === item.id).stock,
+        (item) =>
+          !products.some(
+            (p) =>
+              p.id === item.id &&
+              !p.archived &&
+              p.price !== null &&
+              item.qty <= p.stock,
+          ),
       )
     ) {
       setToast('Stock changed. Please review your cart.');
@@ -118,8 +344,12 @@ export function StoreProvider({ children }) {
       id: `TK-${1025 + orders.length - initialOrders.length}`,
       date: previewDate.toISOString().slice(0, 10),
       status: 'Processing',
+      customerId: 'CU-001',
+      deliveryId: `DL-TK-${1025 + orders.length - initialOrders.length}`,
       items: cart.map((item) => ({
         ...item,
+        name: products.find((p) => p.id === item.id).name,
+        image: products.find((p) => p.id === item.id).image,
         price: products.find((p) => p.id === item.id).price,
       })),
       address: `${address.name} · ${address.street}, ${address.city} ${address.postcode}`,
@@ -202,7 +432,17 @@ export function StoreProvider({ children }) {
   return (
     <StoreContext.Provider
       value={{
-        products,
+        products: products.filter((p) => !p.archived),
+        allProducts: products,
+        categories,
+        saveProduct,
+        removeProduct,
+        updateStock,
+        addCategory,
+        removeCategory,
+        updateOrderStatus,
+        submitReview,
+        moderateReview,
         cart,
         cartItems,
         total,
@@ -213,7 +453,6 @@ export function StoreProvider({ children }) {
         setAddress,
         orders,
         reviews,
-        setReviews,
         addToCart,
         updateQuantity,
         toggleWishlist,

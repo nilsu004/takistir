@@ -243,7 +243,12 @@ export function Orders() {
 }
 
 export function Order({ id }) {
-  const { orders, products, cancelOrder, requestReturn } = useStore();
+  const {
+    orders,
+    allProducts: products,
+    cancelOrder,
+    requestReturn,
+  } = useStore();
   const [cancelOpen, setCancelOpen] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
   const order = orders.find((item) => item.id === id);
@@ -287,7 +292,10 @@ export function Order({ id }) {
       <div className="panel">
         <h2>Items</h2>
         {order.items.map((item) => {
-          const product = products.find((p) => p.id === item.id);
+          const product = {
+            ...products.find((p) => p.id === item.id),
+            ...item,
+          };
           return (
             <div className="order-item" key={item.id}>
               <ProductArt product={product} />
@@ -380,7 +388,9 @@ export function Order({ id }) {
             <div className="return-choice" key={item.id}>
               <label>
                 <input type="checkbox" name={item.id} defaultChecked />{' '}
-                {products.find((p) => p.id === item.id).name}
+                {item.name ||
+                  products.find((p) => p.id === item.id)?.name ||
+                  item.id}
               </label>
               <label>
                 Quantity{' '}
@@ -408,7 +418,10 @@ export function Order({ id }) {
           <ul>
             {order.returnRequest.items.map((item) => (
               <li key={item.id}>
-                {products.find((p) => p.id === item.id).name} × {item.qty}
+                {item.name ||
+                  products.find((p) => p.id === item.id)?.name ||
+                  item.id}{' '}
+                × {item.qty}
               </li>
             ))}
           </ul>
@@ -424,7 +437,7 @@ export function Order({ id }) {
 }
 
 export function Invoice({ id }) {
-  const { orders, products, user } = useStore();
+  const { orders, allProducts: products, user } = useStore();
   const order = orders.find((row) => row.id === id);
   if (!user) return <AccountShell active="Orders" />;
   if (!order)
@@ -477,7 +490,11 @@ export function Invoice({ id }) {
             <tbody>
               {order.items.map((item) => (
                 <tr key={item.id}>
-                  <td>{products.find((p) => p.id === item.id).name}</td>
+                  <td>
+                    {item.name ||
+                      products.find((p) => p.id === item.id)?.name ||
+                      item.id}
+                  </td>
                   <td>{item.qty}</td>
                   <td>{money(item.price)}</td>
                   <td>{money(item.price * item.qty)}</td>

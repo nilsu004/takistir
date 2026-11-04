@@ -9,6 +9,7 @@ import {
   Summary,
 } from './components.jsx';
 import { money } from './data.js';
+import { publishedRating } from './manager/model.js';
 import { useStore } from './Store.jsx';
 
 export function Home() {
@@ -39,7 +40,7 @@ export function Home() {
 }
 
 export function Catalog({ params }) {
-  const { products } = useStore();
+  const { products, categories } = useStore();
   const [category, setCategory] = useState(
     params.get('category') || 'All accessories',
   );
@@ -82,13 +83,7 @@ export function Catalog({ params }) {
             value={category}
             onChange={(event) => setCategory(event.target.value)}
           >
-            {[
-              'All accessories',
-              'Necklaces',
-              'Earrings',
-              'Rings',
-              'Bracelets',
-            ].map((name) => (
+            {['All accessories', ...categories].map((name) => (
               <option key={name}>{name}</option>
             ))}
           </select>
@@ -143,7 +138,7 @@ export function Product({ id }) {
     user,
     orders,
     reviews,
-    setReviews,
+    submitReview,
     setToast,
   } = useStore();
   const [qty, setQty] = useState(1);
@@ -166,13 +161,7 @@ export function Product({ id }) {
         order.items.some((item) => item.id === id),
     );
   const ownReviews = reviews.filter((review) => review.productId === id);
-  const rating = ownReviews.length
-    ? (
-        (product.rating * product.popularity +
-          ownReviews.reduce((sum, r) => sum + r.rating, 0)) /
-        (product.popularity + ownReviews.length)
-      ).toFixed(1)
-    : product.rating;
+  const { rating, count } = publishedRating(product, reviews);
   return (
     <main className="container product-page">
       <p className="breadcrumb">
@@ -197,10 +186,14 @@ export function Product({ id }) {
                 ?.scrollIntoView({ behavior: 'smooth' });
             }}
           >
-            ★★★★★ &nbsp; {rating} / 5 · {product.popularity + ownReviews.length}{' '}
-            reviews
+            ★★★★★ &nbsp; {rating} / 5 · {count} reviews
           </a>
           <p className="detail-price">{money(product.price)}</p>
+          {product.price === null && (
+            <p className="muted">
+              Available to purchase after Sales Manager pricing.
+            </p>
+          )}
           <p className="product-description">{product.description}</p>
           <p className={product.stock ? 'stock' : 'out-of-stock'}>
             {product.stock
@@ -210,7 +203,7 @@ export function Product({ id }) {
           <div className="product-actions">
             <Quantity value={qty} onChange={setQty} max={product.stock} />
             <Button
-              disabled={!product.stock}
+              disabled={!product.stock || product.price === null}
               onClick={() => addToCart(id, qty)}
             >
               Add to cart
@@ -229,7 +222,9 @@ export function Product({ id }) {
               Product ID: {id} · Model: {product.model}
             </p>
             <p>Serial no: {product.serial}</p>
-            <p>Warranty: 2 years · Distributor: Takıştır</p>
+            <p>
+              Warranty: {product.warranty} · Distributor: {product.distributor}
+            </p>
             <p>Material: {product.material}</p>
           </div>
         </div>
@@ -244,8 +239,8 @@ export function Product({ id }) {
           )}
         </div>
         <Notice>
-          Only purchased and delivered products can be reviewed. Comments appear
-          after approval; ratings are published directly.
+          Only purchased and delivered products can be reviewed. Both comments
+          and star ratings appear after Product Manager approval.
         </Notice>
         {reviewOpen && (
           <form
@@ -253,19 +248,16 @@ export function Product({ id }) {
             onSubmit={(event) => {
               event.preventDefault();
               const data = new FormData(event.currentTarget);
-              setReviews((rows) => [
-                ...rows,
-                {
-                  productId: id,
-                  rating: Number(data.get('rating')),
-                  comment: data.get('comment'),
-                  pending: true,
-                },
-              ]);
-              setReviewOpen(false);
-              setToast(
-                'Rating saved. Your comment is waiting for approval in this preview.',
+              const error = submitReview(
+                id,
+                Number(data.get('rating')),
+                String(data.get('comment')),
               );
+              if (error) {
+                setToast(error);
+                return;
+              }
+              setReviewOpen(false);
             }}
           >
             <label className="field">
@@ -295,17 +287,27 @@ export function Product({ id }) {
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td>★★★★★</td>
-                <td>Elegant and suitable for everyday wear.</td>
-                <td>A*** · Verified purchase</td>
-              </tr>
+              {ownReviews
+                .filter((review) => review.status === 'Approved')
+                .map((review) => (
+                  <tr key={review.id}>
+                    <td>{'★'.repeat(review.rating)}</td>
+                    <td>{review.comment}</td>
+                    <td>{review.author?.slice(0, 1)}*** · Verified purchase</td>
+                  </tr>
+                ))}
+              {!ownReviews.some((review) => review.status === 'Approved') && (
+                <tr>
+                  <td colSpan={3}>No published comments yet.</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
-        {ownReviews.some((review) => review.pending) && (
+        {user && ownReviews.some((review) => review.status === 'Pending') && (
           <p className="muted">
-            Your rating is included above. Your comment is awaiting approval.
+            Your rating and comment are awaiting approval and are not published
+            yet.
           </p>
         )}
       </section>
