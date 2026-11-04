@@ -1,5 +1,7 @@
 export const money = (amount) =>
-  `${new Intl.NumberFormat('en-GB').format(amount)} TRY`;
+  amount === null
+    ? 'Price pending'
+    : `${new Intl.NumberFormat('en-GB').format(amount)} TRY`;
 export const previewDate = new Date('2026-11-01T12:00:00+03:00');
 export const products = [
   {
