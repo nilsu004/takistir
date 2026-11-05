@@ -1,8 +1,9 @@
 # Product and category database (SCRUM-42)
 
-The migration targets **PostgreSQL 17**, matching the Docker Compose configuration on
-`SCRUM-39-database-setup`. That setup is not yet on `main`; this change does not
-merge it or add a backend database driver. SQL files can be applied with `psql` or
+The migrations target **PostgreSQL 17**, matching the Docker Compose configuration on
+`SCRUM-39-database-setup`. The API applies them automatically on startup
+(`backend/src/db.js`), recording each file in `schema_migrations`; see the
+[backend README](../README.md#database). Manual application below remains possible. SQL files can be applied with `psql` or
 through the database container after that setup branch is integrated.
 
 ## Apply

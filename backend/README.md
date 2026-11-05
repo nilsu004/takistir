@@ -1,10 +1,23 @@
-# Backend — local integration
+# Backend
 
-The Express API now connects the storefront and Product Manager workspace. Run Node.js 24+ and `npm run dev` from the repository root. Vite proxies `/api` to `http://127.0.0.1:3001`.
+The Express API connects the storefront and Product Manager workspace to **PostgreSQL 17**. Run Node.js 24+ and `npm run dev` from the repository root. Vite proxies `/api` to `http://127.0.0.1:3001`.
 
-## Local storage and accounts
+## Database
 
-The local adapter uses Node's built-in SQLite module. On first startup it creates `backend/data/local.sqlite` with the existing catalog, sample orders and two test accounts:
+The API always uses PostgreSQL. It picks the server like this:
+
+| Situation                 | Database used                                                                                                                   |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL` is set     | That server, for example the team Docker database: `postgres://takistir:takistir@127.0.0.1:5432/takistir`                       |
+| `DATABASE_URL` is not set | A private PostgreSQL 17 started by the `embedded-postgres` dev dependency, stored in `backend/data/postgres` (no Docker needed) |
+| `NODE_ENV=production`     | `DATABASE_URL` is required; demo accounts are never created                                                                     |
+
+Set `DATABASE_URL` in `backend/.env` (see `.env.example`) or the shell. `LOCAL_PG_DIR` changes the embedded data folder. To start again from demo data, stop the API and delete `backend/data/postgres` (or empty the Docker database). The data folder is ignored by Git.
+
+On startup the API:
+
+1. Applies every `db/migrations/NNN_*.sql` file that is not yet recorded in `schema_migrations`, in file-name order. A database where `001` was already applied by hand with `psql` is detected and adopted.
+2. Outside production, loads the demo catalogue, orders and test accounts into an empty database (`src/seed.js`).
 
 | Role            | Email                  | Password        |
 | --------------- | ---------------------- | --------------- |
@@ -13,13 +26,15 @@ The local adapter uses Node's built-in SQLite module. On first startup it create
 
 Use **My account → Local test accounts** or enter these credentials. Use an incognito window or a different browser profile to run both roles simultaneously; ordinary tabs share cookies.
 
-Changes persist across page reloads and API restarts. Set `LOCAL_DB_PATH` to use a different SQLite file; relative paths resolve from the backend process directory. The database, passwords and session data are ignored by Git. To get fresh fixtures without deleting anything, start with a new `LOCAL_DB_PATH`.
+### Schema
 
-This adapter is for local testing. Startup refuses `NODE_ENV=production` because known test credentials are seeded. The PostgreSQL migration under `db/` is retained unchanged and is not connected by this adapter. SQLite stores a versioned JSON application snapshot plus a separate session table; it is not a migration of the team's relational PostgreSQL schema.
+`001` (Mahmut) creates `categories` and `products` and is unchanged. `003` adds the store fields the API needs: a public product `code` (such as `TK-001`; the integer `id` stays the internal key), image, material, collection, popularity, imported rating, an `archived` flag, case-insensitive unique category names, and a nullable `price` because sales managers set prices (requirement 11). Rows inserted without these columns get defaults, so plain catalogue seeds keep working. `004` adds `users`, `sessions`, `orders`, `order_items`, `return_requests`, `return_request_items` and `reviews`. Order items copy the product name, image and paid unit price at purchase time. Number `002` is left for the search-index migration on `SCRUM-45-search-queries`.
+
+Deleting a product or category archives it, because past orders still reference them. Re-adding an archived category name restores it.
 
 ## API
 
-All state-changing requests require JSON and `X-Takistir-Request: 1`. Same-origin browser requests go through Vite; no cross-origin CORS access is enabled. Local frontend origins on ports 5173 and 5174 are accepted. Sessions use random opaque HttpOnly/SameSite=Strict cookies, hashed tokens in SQLite, an eight-hour expiry and server-side logout invalidation. Passwords use salted scrypt hashes. The server assigns roles; self-registration can create only customers.
+All state-changing requests require JSON and `X-Takistir-Request: 1`. Same-origin browser requests go through Vite; no cross-origin CORS access is enabled. Local frontend origins on ports 5173 and 5174 are accepted. Sessions use random opaque HttpOnly/SameSite=Strict cookies, SHA-256 token hashes in the `sessions` table, an eight-hour expiry and server-side logout invalidation. Passwords use salted scrypt hashes. The server assigns roles; self-registration can create only customers.
 
 | Method       | Endpoint                                                    | Access                                                       |
 | ------------ | ----------------------------------------------------------- | ------------------------------------------------------------ |
@@ -41,12 +56,12 @@ All state-changing requests require JSON and `X-Takistir-Request: 1`. Same-origi
 
 Mutations return `{ data, state }`; the state has a revision and is filtered by role/ownership. No password hashes, session tokens, other customers' orders or unapproved reviews are exposed to public clients. Catalog and order views refresh every three seconds and on window focus. A disconnected UI displays an API error instead of silently switching to independent demo data.
 
-Stock checks, order creation, cancellation, category guards and moderation run inside `BEGIN IMMEDIATE` SQLite transactions. A checkout key prevents retrying the same purchase from decrementing stock twice. Prices come from the server; client price fields cannot change order totals. Product Manager cannot set price or discount fields. New products await Sales Manager pricing and cannot be purchased yet. Removal archives products, preserving purchase-time order/invoice names, images and paid prices.
+Every change runs in one PostgreSQL transaction (`src/db.js`, `tx`); if any step fails, nothing is saved. Checkout locks the purchased product rows with `SELECT … FOR UPDATE` in id order, so competing buyers cannot oversell and two carts with the same items in a different order cannot deadlock. A `CHECK` constraint also keeps stock non-negative. A checkout key prevents retrying the same purchase from decrementing stock twice. Prices come from the server; client price fields cannot change order totals. Product Manager cannot set price or discount fields. New products await Sales Manager pricing and cannot be purchased yet. Removal archives products, preserving purchase-time order/invoice names, images and paid prices.
 
 ## Checks and limits
 
-`npm test` runs the HTTP integration and shared rule tests; `npm run check` also builds the frontend and checks formatting. Tests create isolated temporary databases and servers.
+`npm test` runs the HTTP integration, PostgreSQL and shared rule tests; `npm run check` also builds the frontend and checks formatting. Each test gets its own new database on a throwaway embedded PostgreSQL server. Set `TEST_DATABASE_URL` (for example `postgres://takistir:takistir@127.0.0.1:5432/postgres`) to use another server instead; test databases are created and dropped there, so never point it at real data.
 
-This change does not add Sales Manager or Support Agent backend workflows, real payments, delivery-provider calls, invoice PDF generation/email, password recovery, email verification, production account provisioning or the PostgreSQL adapter. Return requests are recorded for the existing customer screen; refund approval/processing is not implemented. Cart and wishlist remain browser-local. Their retention is not cross-device. Account tax IDs still use demo placeholders.
+This backend does not yet add Sales Manager or Support Agent backend workflows, real payments, delivery-provider calls, invoice PDF generation/email, password recovery, email verification, production account provisioning or server-side carts. Return requests are recorded for the existing customer screen; refund approval/processing is not implemented. Cart and wishlist remain browser-local. Their retention is not cross-device. Account tax IDs still use demo placeholders.
 
 Both review comments and star ratings require approval, following the requested panel behavior; this differs from course requirement 5, which calls for immediate star publication. The original historical rating aggregates are seeded demo values.
