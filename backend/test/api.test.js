@@ -79,6 +79,34 @@ const checkout = {
   },
 };
 
+test('public product detail reads the product by code from PostgreSQL', async (t) => {
+  const { db, guest } = await fixture(t);
+  await db.query('UPDATE products SET stock_quantity = 7 WHERE code = $1', [
+    'TK-001',
+  ]);
+
+  const { status, body } = await guest('/products/TK-001');
+  assert.equal(status, 200);
+  assert.equal(body.id, 'TK-001');
+  assert.equal(body.stock, 7);
+});
+
+test('public product detail returns 404 for missing and archived products', async (t) => {
+  const { db, guest } = await fixture(t);
+  await db.query('UPDATE products SET archived = TRUE WHERE code = $1', [
+    'TK-001',
+  ]);
+
+  for (const id of ['TK-MISSING', 'TK-001']) {
+    assert.equal((await guest(`/products/${id}`)).status, 404);
+  }
+});
+
+test('public product detail returns 400 for an invalid product code', async (t) => {
+  const { guest } = await fixture(t);
+  assert.equal((await guest('/products/TK_001')).status, 400);
+});
+
 test('login, HttpOnly sessions, role boundaries, account isolation and logout', async (t) => {
   const { manager, customer, guest, client } = await fixture(t);
   assert.equal(

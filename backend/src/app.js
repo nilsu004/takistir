@@ -22,6 +22,7 @@ import {
   manager,
   moderateReview,
   placeOrder,
+  readProduct,
   removeCategory,
   requestReturn,
   saveProduct,
@@ -206,6 +207,9 @@ export function createApp({
     await send(req, res);
   });
   app.get('/api/state', (req, res) => send(req, res));
+  app.get('/api/products/:id', async (req, res) => {
+    res.json(await readProduct(db, req.params.id));
+  });
   // Every state change: role check → one transaction → revision bump → snapshot.
   function mutation(path, role, fn, method = 'post') {
     app[method](path, async (req, res) => {

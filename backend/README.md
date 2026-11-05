@@ -61,6 +61,17 @@ Mutations return `{ data, state }`; the state has a revision and is filtered by 
 
 Every change runs in one PostgreSQL transaction (`src/db.js`, `tx`); if any step fails, nothing is saved. Checkout locks the purchased product rows with `SELECT … FOR UPDATE` in id order, so competing buyers cannot oversell and two carts with the same items in a different order cannot deadlock. A `CHECK` constraint also keeps stock non-negative. A checkout key prevents retrying the same purchase from decrementing stock twice. Prices come from the server; client price fields cannot change order totals. Product Manager cannot set price or discount fields. New products await Sales Manager pricing and cannot be purchased yet. Removal archives products, preserving purchase-time order/invoice names, images and paid prices.
 
+## Public product detail
+
+`GET /api/products/:id` is available without signing in. Use the public product
+code (for example, `TK-001`). Codes are case-sensitive and contain 1–40 ASCII
+letters, digits, or hyphens.
+
+- `200` returns the product in the same shape as an entry in
+  `/api/state`'s `state.products`, including `id`, `price`, and `stock`.
+- `400` returns `{"error":"Invalid product ID."}` for an invalid code.
+- `404` returns `{"error":"Product not found."}` for a missing or archived product.
+
 ## Cart (SCRUM-49)
 
 Guests and signed-in customers each have one cart; staff accounts have none (403). Every cart endpoint returns:
