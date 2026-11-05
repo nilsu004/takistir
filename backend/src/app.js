@@ -2,6 +2,15 @@ import express from 'express';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { passwordHash, passwordMatches } from './passwords.js';
 import {
+  GUEST_CART_DAYS,
+  cartOwner,
+  clearCart,
+  deleteExpiredGuestCarts,
+  readCart,
+  removeCartItem,
+  setCartItem,
+} from './cart.js';
+import {
   addCategory,
   archiveProduct,
   cancelOrder,
@@ -24,6 +33,14 @@ import {
 } from './service.js';
 
 const cookieName = 'takistir_session';
+const cartCookieName = 'takistir_cart';
+function readCookie(req, name) {
+  const match = req.headers.cookie
+    ?.split(';')
+    .map((v) => v.trim())
+    .find((v) => v.startsWith(`${name}=`));
+  return match ? match.slice(name.length + 1) : null;
+}
 const tokenHash = (token) => createHash('sha256').update(token).digest('hex');
 const cookieOptions = {
   httpOnly: true,
@@ -86,13 +103,10 @@ export function createApp({
   });
   app.use(express.json({ limit: '100kb' }));
   app.use('/api', async (req, _res, next) => {
-    const match = req.headers.cookie
-      ?.split(';')
-      .map((v) => v.trim())
-      .find((v) => v.startsWith(`${cookieName}=`));
-    req.sessionHash = match
-      ? tokenHash(match.slice(cookieName.length + 1))
-      : null;
+    const session = readCookie(req, cookieName);
+    req.sessionHash = session ? tokenHash(session) : null;
+    const cart = readCookie(req, cartCookieName);
+    req.cartTokenHash = cart ? tokenHash(cart) : null;
     req.user = null;
     if (req.sessionHash) {
       const { rows } = await db.query(
@@ -252,6 +266,52 @@ export function createApp({
   mutation('/api/reviews', customer, (c, r) =>
     submitReview(c, r.user, r.body || {}),
   );
+  // SCRUM-49: cart for guests (cookie) and signed-in customers (account).
+  // Every endpoint returns the cart as { items, total }.
+  const guestCartMaxAge = GUEST_CART_DAYS * 24 * 3600000;
+  function keepGuestCookie(req, res, { create = false } = {}) {
+    if (req.user) return;
+    let token = readCookie(req, cartCookieName);
+    if (!token) {
+      if (!create) return;
+      token = randomBytes(32).toString('hex');
+      req.cartTokenHash = tokenHash(token);
+    }
+    // Sliding expiry: the cookie lives 30 days after the last change.
+    res.cookie(cartCookieName, token, {
+      ...cookieOptions,
+      maxAge: guestCartMaxAge,
+    });
+  }
+  function cartRoute(method, path, change, { createsCart = false } = {}) {
+    app[method](path, async (req, res) => {
+      cartOwner(req.user, null); // staff accounts are rejected before any cookie is set
+      if (createsCart && !req.user && !req.cartTokenHash)
+        await deleteExpiredGuestCarts(db);
+      keepGuestCookie(req, res, { create: createsCart });
+      const owner = cartOwner(req.user, req.cartTokenHash);
+      res.json(
+        await db.tx(async (c) => {
+          await change(c, owner, req);
+          return readCart(c, owner);
+        }),
+      );
+    });
+  }
+  app.get('/api/cart', async (req, res) => {
+    const owner = cartOwner(req.user, req.cartTokenHash);
+    res.json(await db.tx((c) => readCart(c, owner), { readOnly: true }));
+  });
+  cartRoute(
+    'put',
+    '/api/cart/items/:id',
+    (c, owner, req) => setCartItem(c, owner, req.params.id, req.body?.qty),
+    { createsCart: true },
+  );
+  cartRoute('delete', '/api/cart/items/:id', (c, owner, req) =>
+    removeCartItem(c, owner, req.params.id),
+  );
+  cartRoute('delete', '/api/cart', (c, owner) => clearCart(c, owner));
   app.get('/api/orders/:id/invoice', async (req, res) => {
     if (!req.user) fail(401, 'Sign in first.');
     res.json(
