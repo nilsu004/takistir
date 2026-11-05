@@ -1,20 +1,24 @@
 import express from 'express';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
-import { createStore, passwordHash, passwordMatches } from './store.js';
+import { passwordHash, passwordMatches } from './passwords.js';
 import {
+  addCategory,
+  archiveProduct,
   cancelOrder,
   customer,
   fail,
+  findUser,
+  invoiceFor,
   manager,
-  orderFor,
+  moderateReview,
   placeOrder,
-  publicUser,
+  removeCategory,
   requestReturn,
   saveProduct,
   setStock,
   submitReview,
   text,
+  updateProfile,
   updateStatus,
   view,
 } from './service.js';
@@ -28,8 +32,16 @@ const cookieOptions = {
   path: '/',
 };
 
+// PostgreSQL error codes that mean the request conflicts with stored data.
+const pgErrors = {
+  23505: [409, 'This value is already in use.'],
+  23503: [409, 'This record is referenced by other data.'],
+  23514: [400, 'A value is outside the allowed range.'],
+  '40P01': [409, 'The request conflicted with another one. Please try again.'],
+};
+
 export function createApp({
-  store,
+  db,
   allowedOrigins = [
     'http://127.0.0.1:5173',
     'http://localhost:5173',
@@ -37,7 +49,9 @@ export function createApp({
     'http://localhost:5174',
   ],
 } = {}) {
-  if (!store) throw new Error('A store is required.');
+  if (!db) throw new Error('A database is required.');
+  // Express 5 forwards rejected promises from async handlers to the error
+  // handler below, so services can simply throw fail(...).
   const app = express();
   app.disable('x-powered-by');
   app.use((_req, res, next) => {
@@ -71,7 +85,7 @@ export function createApp({
     next();
   });
   app.use(express.json({ limit: '100kb' }));
-  app.use('/api', (req, _res, next) => {
+  app.use('/api', async (req, _res, next) => {
     const match = req.headers.cookie
       ?.split(';')
       .map((v) => v.trim())
@@ -79,41 +93,40 @@ export function createApp({
     req.sessionHash = match
       ? tokenHash(match.slice(cookieName.length + 1))
       : null;
-    const session =
-      req.sessionHash &&
-      store.db
-        .prepare(
-          'SELECT user_id FROM sessions WHERE token_hash = ? AND expires > ?',
-        )
-        .get(req.sessionHash, Date.now());
-    req.user = session
-      ? store.read().users.find((u) => u.id === session.user_id)
-      : null;
+    req.user = null;
+    if (req.sessionHash) {
+      const { rows } = await db.query(
+        `SELECT u.id, u.name, u.email, u.home_address, u.tax_id, u.role
+         FROM sessions s JOIN users u ON u.id = s.user_id
+         WHERE s.token_hash = $1 AND s.expires_at > now()`,
+        [req.sessionHash],
+      );
+      req.user = rows[0] ?? null;
+    }
     next();
   });
-  const snapshot = (state, userId) =>
-    view(
-      state,
-      state.users.find((u) => u.id === userId),
-    );
-  const send = (req, res, result = null) =>
-    res.json({ data: result, state: snapshot(store.read(), req.user?.id) });
-  function newSession(req, res, user) {
+  // The state is read in one REPEATABLE READ snapshot so all lists agree.
+  const snapshot = (user) => db.tx((c) => view(c, user), { readOnly: true });
+  const bumpRevision = () => db.query("SELECT nextval('state_revision')");
+  const send = async (req, res, result = null) =>
+    res.json({ data: result, state: await snapshot(req.user) });
+  async function newSession(req, res, user) {
     if (req.sessionHash)
-      store.db
-        .prepare('DELETE FROM sessions WHERE token_hash = ?')
-        .run(req.sessionHash);
-    store.db.prepare('DELETE FROM sessions WHERE expires <= ?').run(Date.now());
+      await db.query('DELETE FROM sessions WHERE token_hash = $1', [
+        req.sessionHash,
+      ]);
+    await db.query('DELETE FROM sessions WHERE expires_at <= now()');
     const token = randomBytes(32).toString('hex');
-    store.db
-      .prepare('INSERT INTO sessions VALUES (?, ?, ?)')
-      .run(tokenHash(token), user.id, Date.now() + 8 * 3600000);
+    await db.query(
+      `INSERT INTO sessions (token_hash, user_id, expires_at)
+       VALUES ($1, $2, now() + interval '8 hours')`,
+      [tokenHash(token), user.id],
+    );
     res.cookie(cookieName, token, { ...cookieOptions, maxAge: 8 * 3600000 });
     req.user = user;
   }
-  // Local demo credentials are intentionally enabled only in development.
   const attempts = new Map();
-  app.post('/api/auth/login', (req, res) => {
+  app.post('/api/auth/login', async (req, res) => {
     const now = Date.now();
     for (const [key, row] of attempts)
       if (row.until < now) attempts.delete(key);
@@ -125,14 +138,15 @@ export function createApp({
     attempts.set(key, attempt);
     const email = text(req.body?.email, 'Email', 254).toLowerCase();
     const password = text(req.body?.password, 'Password', 128);
-    const user = store.read().users.find((u) => u.email === email);
-    if (!user || !passwordMatches(password, user.passwordHash))
+    const user = await findUser(db, 'email', email);
+    if (!user || !passwordMatches(password, user.password_hash))
       fail(401, 'Email or password is incorrect.');
     attempts.delete(key);
-    newSession(req, res, user);
-    send(req, res);
+    delete user.password_hash;
+    await newSession(req, res, user);
+    await send(req, res);
   });
-  app.post('/api/auth/register', (req, res) => {
+  app.post('/api/auth/register', async (req, res) => {
     const body = req.body || {};
     const email = text(body.email, 'Email', 254).toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
@@ -143,38 +157,37 @@ export function createApp({
     if (body.role && body.role !== 'customer')
       fail(403, 'Self-registration creates customer accounts only.');
     const name = text(body.name, 'Name');
-    const user = {
-      id: `CU-${randomUUID()}`,
-      email,
-      name,
-      home: '',
-      taxId: '',
-      role: 'customer',
-      passwordHash: passwordHash(password),
-    };
-    store.write((state) => {
-      if (state.users.some((u) => u.email === email))
-        fail(409, 'This email is already registered.');
-      state.users.push(user);
-    });
-    newSession(req, res, user);
-    send(req, res);
+    const { rows } = await db.query(
+      `INSERT INTO users (id, email, name, role, password_hash)
+       VALUES ($1, $2, $3, 'customer', $4)
+       ON CONFLICT (email) DO NOTHING
+       RETURNING id, name, email, home_address, tax_id, role`,
+      [`CU-${randomUUID()}`, email, name, passwordHash(password)],
+    );
+    if (!rows.length) fail(409, 'This email is already registered.');
+    await bumpRevision();
+    await newSession(req, res, rows[0]);
+    await send(req, res);
   });
-  app.post('/api/auth/logout', (req, res) => {
+  app.post('/api/auth/logout', async (req, res) => {
     if (req.sessionHash)
-      store.db
-        .prepare('DELETE FROM sessions WHERE token_hash = ?')
-        .run(req.sessionHash);
+      await db.query('DELETE FROM sessions WHERE token_hash = $1', [
+        req.sessionHash,
+      ]);
     req.user = null;
     res.clearCookie(cookieName, cookieOptions);
-    send(req, res);
+    await send(req, res);
   });
   app.get('/api/state', (req, res) => send(req, res));
+  // Every state change: role check → one transaction → revision bump → snapshot.
   function mutation(path, role, fn, method = 'post') {
-    app[method](path, (req, res) => {
+    app[method](path, async (req, res) => {
       role(req.user);
-      const { state, result } = store.write((state) => fn(state, req));
-      res.json({ data: result ?? null, state: snapshot(state, req.user.id) });
+      const result = await db.tx((c) => fn(c, req));
+      await bumpRevision();
+      if (req.user) req.user = await findUser(db, 'id', req.user.id);
+      if (req.user) delete req.user.password_hash;
+      res.json({ data: result ?? null, state: await snapshot(req.user) });
     });
   }
   mutation(
@@ -182,105 +195,70 @@ export function createApp({
     (u) => {
       if (!u) fail(401, 'Sign in first.');
     },
-    (s, req) => {
-      const u = s.users.find((u) => u.id === req.user.id);
-      const name = text(req.body?.name, 'Name');
-      const email = text(req.body?.email, 'Email', 254).toLowerCase();
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-        fail(400, 'Enter a valid email address.');
-      if (s.users.some((v) => v.id !== u.id && v.email === email))
-        fail(409, 'This email is already registered.');
-      if (typeof req.body.home !== 'string' || req.body.home.length > 500)
-        fail(400, 'Home address must contain at most 500 characters.');
-      Object.assign(u, { name, email, home: req.body.home.trim() });
-      return publicUser(u);
-    },
+    (c, req) => updateProfile(c, req.user, req.body),
     'patch',
   );
-  mutation('/api/manager/products', manager, (s, r) =>
-    saveProduct(s, r.body || {}),
+  mutation('/api/manager/products', manager, (c, r) =>
+    saveProduct(c, r.body || {}),
   );
   mutation(
     '/api/manager/products/:id',
     manager,
-    (s, r) => saveProduct(s, r.body || {}, r.params.id),
+    (c, r) => saveProduct(c, r.body || {}, r.params.id),
     'put',
   );
   mutation(
     '/api/manager/products/:id',
     manager,
-    (s, r) => {
-      const p = s.products.find((p) => p.id === r.params.id && !p.archived);
-      if (!p) fail(404, 'Product not found.');
-      p.archived = true;
-    },
+    (c, r) => archiveProduct(c, r.params.id),
     'delete',
   );
   mutation(
     '/api/manager/products/:id/stock',
     manager,
-    (s, r) => setStock(s, r.params.id, r.body?.stock),
+    (c, r) => setStock(c, r.params.id, r.body?.stock),
     'patch',
   );
-  mutation('/api/manager/categories', manager, (s, r) => {
-    const name = text(r.body?.name, 'Category', 60);
-    if (
-      ['New arrivals', 'All accessories', ...s.categories].some(
-        (c) => c.toLowerCase() === name.toLowerCase(),
-      )
-    )
-      fail(409, 'This category name is already used or reserved.');
-    s.categories.push(name);
-  });
+  mutation('/api/manager/categories', manager, (c, r) =>
+    addCategory(c, r.body?.name),
+  );
   mutation(
     '/api/manager/categories/:name',
     manager,
-    (s, r) => {
-      if (!s.categories.includes(r.params.name))
-        fail(404, 'Category not found.');
-      if (s.products.some((p) => !p.archived && p.category === r.params.name))
-        fail(409, 'Move or remove products in this category first.');
-      s.categories = s.categories.filter((c) => c !== r.params.name);
-    },
+    (c, r) => removeCategory(c, r.params.name),
     'delete',
   );
   mutation(
     '/api/manager/orders/:id/status',
     manager,
-    (s, r) => updateStatus(s, r.params.id, r.body?.status),
+    (c, r) => updateStatus(c, r.params.id, r.body?.status),
     'patch',
   );
   mutation(
     '/api/manager/reviews/:id',
     manager,
-    (s, r) => {
-      const review = s.reviews.find((v) => v.id === r.params.id);
-      if (!review) fail(404, 'Review not found.');
-      if (review.status !== 'Pending')
-        fail(409, 'This review has already been moderated.');
-      if (!['Approved', 'Rejected'].includes(r.body?.status))
-        fail(400, 'Choose Approved or Rejected.');
-      review.status = r.body.status;
-    },
+    (c, r) => moderateReview(c, r.params.id, r.body?.status),
     'patch',
   );
-  mutation('/api/orders', customer, (s, r) =>
-    placeOrder(s, r.user, r.body || {}),
+  mutation('/api/orders', customer, (c, r) =>
+    placeOrder(c, r.user, r.body || {}),
   );
-  mutation('/api/orders/:id/cancel', customer, (s, r) =>
-    cancelOrder(s, r.user, r.params.id),
+  mutation('/api/orders/:id/cancel', customer, (c, r) =>
+    cancelOrder(c, r.user, r.params.id),
   );
-  mutation('/api/orders/:id/returns', customer, (s, r) =>
-    requestReturn(s, r.user, r.params.id, r.body?.selected),
+  mutation('/api/orders/:id/returns', customer, (c, r) =>
+    requestReturn(c, r.user, r.params.id, r.body?.selected),
   );
-  mutation('/api/reviews', customer, (s, r) =>
-    submitReview(s, r.user, r.body || {}),
+  mutation('/api/reviews', customer, (c, r) =>
+    submitReview(c, r.user, r.body || {}),
   );
-  app.get('/api/orders/:id/invoice', (req, res) => {
+  app.get('/api/orders/:id/invoice', async (req, res) => {
     if (!req.user) fail(401, 'Sign in first.');
-    const order = orderFor(store.read(), req.user, req.params.id);
-    const { checkoutKey: _, inventoryReserved: __, ...invoice } = order;
-    res.json(invoice);
+    res.json(
+      await db.tx((c) => invoiceFor(c, req.user, req.params.id), {
+        readOnly: true,
+      }),
+    );
   });
   app.use((_req, res) => res.status(404).json({ error: 'Route not found.' }));
   app.use((error, _req, res, _next) => {
@@ -288,22 +266,12 @@ export function createApp({
       return res.status(400).json({ error: 'Invalid JSON body.' });
     if (error.type === 'entity.too.large')
       return res.status(413).json({ error: 'Request body too large.' });
+    if (!error.status && pgErrors[error.code])
+      [error.status, error.message] = pgErrors[error.code];
     if (!error.status) console.error(error);
     res
       .status(error.status || 500)
       .json({ error: error.status ? error.message : 'Internal server error.' });
   });
   return app;
-}
-
-export function createLocalApp() {
-  if (process.env.NODE_ENV === 'production')
-    throw new Error(
-      'The seeded SQLite adapter is for local integration only. Configure a production database and account provisioning first.',
-    );
-  const filename =
-    process.env.LOCAL_DB_PATH ||
-    fileURLToPath(new URL('../data/local.sqlite', import.meta.url));
-  const store = createStore(filename);
-  return { app: createApp({ store }), store };
 }
