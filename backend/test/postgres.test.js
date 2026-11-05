@@ -1,13 +1,21 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { createApp } from '../src/app.js';
 import { migrate } from '../src/db.js';
 import { seedDemoData } from '../src/seed.js';
 import { freshDb, stopServer } from './postgres.js';
 
 after(stopServer);
+
+// Read from the folder so new migrations (such as 002 search indexes) do not
+// require editing these tests.
+const migrationFiles = readdirSync(
+  new URL('../db/migrations/', import.meta.url),
+)
+  .filter((f) => /^\d{3}_.+\.sql$/.test(f))
+  .sort();
 
 const address = {
   name: 'Test',
@@ -64,9 +72,10 @@ test('migrations are recorded and running them again changes nothing', async (t)
     'SELECT version FROM schema_migrations ORDER BY version',
   );
   assert.deepEqual(
-    rows.map((r) => r.version.slice(0, 3)),
-    ['001', '003', '004'],
+    rows.map((r) => r.version),
+    migrationFiles,
   );
+  assert(migrationFiles.includes('004_create_accounts_orders_reviews.sql'));
   assert.deepEqual(await migrate(db), []);
 });
 
@@ -82,10 +91,10 @@ test('a database where 001 was applied by hand with psql is adopted, not re-crea
       'utf8',
     ),
   );
-  assert.deepEqual(await migrate(db), [
-    '003_extend_catalogue_for_store.sql',
-    '004_create_accounts_orders_reviews.sql',
-  ]);
+  assert.deepEqual(
+    await migrate(db),
+    migrationFiles.filter((f) => !f.startsWith('001_')),
+  );
   const { rows } = await db.query(
     "SELECT 1 FROM schema_migrations WHERE version LIKE '001_%'",
   );
