@@ -6,6 +6,7 @@ import {
   cartOwner,
   clearCart,
   deleteExpiredGuestCarts,
+  mergeGuestCart,
   readCart,
   removeCartItem,
   setCartItem,
@@ -139,6 +140,18 @@ export function createApp({
     res.cookie(cookieName, token, { ...cookieOptions, maxAge: 8 * 3600000 });
     req.user = user;
   }
+  // SCRUM-52: after a customer signs in or registers, the guest cart from
+  // this browser is moved into their account cart and the guest cookie is
+  // removed. Returns { cart: summary } for the response's `data`, or null.
+  async function adoptGuestCart(req, res) {
+    if (req.user?.role !== 'customer' || !req.cartTokenHash) return null;
+    const summary = await db.tx((c) =>
+      mergeGuestCart(c, req.cartTokenHash, req.user.id),
+    );
+    res.clearCookie(cartCookieName, cookieOptions);
+    req.cartTokenHash = null;
+    return { cart: summary };
+  }
   const attempts = new Map();
   app.post('/api/auth/login', async (req, res) => {
     const now = Date.now();
@@ -158,7 +171,7 @@ export function createApp({
     attempts.delete(key);
     delete user.password_hash;
     await newSession(req, res, user);
-    await send(req, res);
+    await send(req, res, await adoptGuestCart(req, res));
   });
   app.post('/api/auth/register', async (req, res) => {
     const body = req.body || {};
@@ -181,7 +194,7 @@ export function createApp({
     if (!rows.length) fail(409, 'This email is already registered.');
     await bumpRevision();
     await newSession(req, res, rows[0]);
-    await send(req, res);
+    await send(req, res, await adoptGuestCart(req, res));
   });
   app.post('/api/auth/logout', async (req, res) => {
     if (req.sessionHash)
