@@ -137,6 +137,73 @@ export async function clearCart(c, owner) {
   await c.query('UPDATE carts SET updated_at = now() WHERE id = $1', [id]);
 }
 
+/**
+ * SCRUM-52: moves a guest cart into the customer's cart when they sign in or
+ * register, so nothing added before login is lost.
+ * - A product in both carts gets the sum of both quantities.
+ * - If the product can be bought, the quantity is capped at the current stock
+ *   (reported in `adjusted`).
+ * - Products that are sold out, removed or not priced are still moved, so the
+ *   customer sees them marked as unavailable instead of silently losing them.
+ * - Products beyond the 100-line limit are left out (reported in `skipped`).
+ * The guest cart is deleted afterwards. Runs inside one transaction.
+ */
+export async function mergeGuestCart(c, guestTokenHash, customerId) {
+  const summary = { merged: 0, adjusted: [], skipped: [] };
+  const guestId = await findCartId(
+    c,
+    { column: 'guest_token_hash', value: guestTokenHash },
+    { lock: true },
+  );
+  if (!guestId) return summary;
+  const cartId = await ensureCart(c, {
+    column: 'customer_id',
+    value: customerId,
+  });
+  const { rows } = await c.query(
+    `SELECT g.product_id, g.quantity AS guest_qty,
+            COALESCE(m.quantity, 0) AS existing_qty,
+            p.code, p.price, p.stock_quantity, p.archived
+     FROM cart_items g
+     JOIN products p ON p.id = g.product_id
+     LEFT JOIN cart_items m ON m.cart_id = $2 AND m.product_id = g.product_id
+     WHERE g.cart_id = $1
+     ORDER BY g.added_at, p.id`,
+    [guestId, cartId],
+  );
+  let lines = Number(
+    (
+      await c.query('SELECT count(*) AS n FROM cart_items WHERE cart_id = $1', [
+        cartId,
+      ])
+    ).rows[0].n,
+  );
+  for (const row of rows) {
+    const isNewLine = row.existing_qty === 0;
+    if (isNewLine && lines >= MAX_CART_LINES) {
+      summary.skipped.push(row.code);
+      continue;
+    }
+    const requested = row.existing_qty + row.guest_qty;
+    const purchasable =
+      !row.archived && row.price !== null && row.stock_quantity > 0;
+    const qty = purchasable
+      ? Math.min(requested, row.stock_quantity)
+      : requested;
+    if (qty < requested)
+      summary.adjusted.push({ id: row.code, requested, qty });
+    await c.query(
+      `INSERT INTO cart_items (cart_id, product_id, quantity) VALUES ($1, $2, $3)
+       ON CONFLICT (cart_id, product_id) DO UPDATE SET quantity = EXCLUDED.quantity`,
+      [cartId, row.product_id, qty],
+    );
+    if (isNewLine) lines += 1;
+    summary.merged += 1;
+  }
+  await c.query('DELETE FROM carts WHERE id = $1', [guestId]);
+  return summary;
+}
+
 /** Deletes guest carts that have not changed for 30 days. */
 export async function deleteExpiredGuestCarts(db) {
   await db.query(
