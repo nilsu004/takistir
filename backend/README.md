@@ -53,15 +53,46 @@ All state-changing requests require JSON and `X-Takistir-Request: 1`. Same-origi
 | POST         | `/api/orders/:id/cancel`, `/api/orders/:id/returns`         | Owning customer                                              |
 | POST         | `/api/reviews`                                              | Customer with a delivered purchase                           |
 | GET          | `/api/orders/:id/invoice`                                   | Owning customer or Product Manager                           |
+| GET          | `/api/cart`                                                 | Guest (cookie) or customer; `{ items, total }`               |
+| PUT          | `/api/cart/items/:id`                                       | Guest or customer; body `{ qty }`; adds or sets quantity     |
+| DELETE       | `/api/cart/items/:id`, `/api/cart`                          | Guest or customer; removes one product / empties the cart    |
 
 Mutations return `{ data, state }`; the state has a revision and is filtered by role/ownership. No password hashes, session tokens, other customers' orders or unapproved reviews are exposed to public clients. Catalog and order views refresh every three seconds and on window focus. A disconnected UI displays an API error instead of silently switching to independent demo data.
 
 Every change runs in one PostgreSQL transaction (`src/db.js`, `tx`); if any step fails, nothing is saved. Checkout locks the purchased product rows with `SELECT … FOR UPDATE` in id order, so competing buyers cannot oversell and two carts with the same items in a different order cannot deadlock. A `CHECK` constraint also keeps stock non-negative. A checkout key prevents retrying the same purchase from decrementing stock twice. Prices come from the server; client price fields cannot change order totals. Product Manager cannot set price or discount fields. New products await Sales Manager pricing and cannot be purchased yet. Removal archives products, preserving purchase-time order/invoice names, images and paid prices.
 
+## Cart (SCRUM-49)
+
+Guests and signed-in customers each have one cart; staff accounts have none (403). Every cart endpoint returns:
+
+```json
+{
+  "items": [
+    {
+      "id": "TK-001",
+      "name": "Luna Pearl Necklace",
+      "image": "necklace-card.svg",
+      "price": 1250,
+      "qty": 2,
+      "stock": 12,
+      "available": true
+    }
+  ],
+  "total": 2500
+}
+```
+
+- Prices, stock and the total come from the database. A price sent by the client is ignored. The total counts only `available` items and is calculated in cents.
+- `PUT` checks the product: unknown or removed → 404; not priced yet, out of stock or quantity above stock → 409; quantity not a whole number ≥ 1 → 400. At most 100 different products per cart.
+- The cart does not reserve stock; checkout checks stock again. An item that sells out, is removed or loses its price after being added stays in the cart with `available: false`.
+- Guests are identified by the `takistir_cart` cookie (random token, HttpOnly, SameSite=Strict, stored only as a SHA-256 hash). It is created on the first `PUT` only; reading the cart sets no cookie. Guest carts expire 30 days after the last change and are deleted when new guest carts are created.
+- Customer carts belong to the account, so they follow the customer across sessions and devices. Moving a guest cart into the customer cart at login is SCRUM-52.
+- Tables: `carts` (exactly one of `customer_id` / `guest_token_hash`) and `cart_items` (one row per product, quantity > 0) in `db/migrations/005_create_carts.sql`, following the SCRUM-48 schema agreed with Mahmut.
+
 ## Checks and limits
 
 `npm test` runs the HTTP integration, PostgreSQL and shared rule tests; `npm run check` also builds the frontend and checks formatting. Each test gets its own new database on a throwaway embedded PostgreSQL server. Set `TEST_DATABASE_URL` (for example `postgres://takistir:takistir@127.0.0.1:5432/postgres`) to use another server instead; test databases are created and dropped there, so never point it at real data.
 
-This backend does not yet add Sales Manager or Support Agent backend workflows, real payments, delivery-provider calls, invoice PDF generation/email, password recovery, email verification, production account provisioning or server-side carts. Return requests are recorded for the existing customer screen; refund approval/processing is not implemented. Cart and wishlist remain browser-local. Their retention is not cross-device. Account tax IDs still use demo placeholders.
+This backend does not yet add Sales Manager or Support Agent backend workflows, real payments, delivery-provider calls, invoice PDF generation/email, password recovery, email verification, production account provisioning, guest-cart merge at login (SCRUM-52) or checkout from the server cart (SCRUM-55). The frontend still keeps its own cart until the cart page uses this API (SCRUM-50). Return requests are recorded for the existing customer screen; refund approval/processing is not implemented. The wishlist remains browser-local. Account tax IDs still use demo placeholders.
 
 Both review comments and star ratings require approval, following the requested panel behavior; this differs from course requirement 5, which calls for immediate star publication. The original historical rating aggregates are seeded demo values.
