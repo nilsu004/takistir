@@ -17,12 +17,19 @@ Set `DATABASE_URL` in `backend/.env` (see `.env.example`) or the shell. `LOCAL_P
 On startup the API:
 
 1. Applies every `db/migrations/NNN_*.sql` file that is not yet recorded in `schema_migrations`, in file-name order. A database where `001` was already applied by hand with `psql` is detected and adopted.
-2. Outside production, loads the demo catalogue, orders and test accounts into an empty database (`src/seed.js`).
+2. Outside production, loads the demo catalogue and orders into an empty database, and adds missing local test accounts without resetting existing data (`src/seed.js`).
 
 | Role            | Email                  | Password        |
 | --------------- | ---------------------- | --------------- |
 | Customer        | deniz@example.com      | CustomerDemo!24 |
 | Product Manager | manager@takistir.local | ManagerDemo!24  |
+| Sales Manager   | sales@takistir.local   | SalesDemo!24    |
+| Support Agent   | support@takistir.local | SupportDemo!24  |
+
+The [account model and merge rules](../docs/customer-roles-and-cart-merge.md)
+describe SCRUM-51, including the four local test roles and existing database
+backfill. Enter the Sales Manager/Support Agent credentials in the login form;
+their dedicated workflows are still pending.
 
 Use **My account → Local test accounts** or enter these credentials. Use an incognito window or a different browser profile to run both roles simultaneously; ordinary tabs share cookies.
 

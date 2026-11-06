@@ -105,7 +105,7 @@ test('seeding twice does not duplicate demo data', async (t) => {
   const { db } = await freshDb(t);
   assert.equal(await seedDemoData(db), false);
   const { rows } = await db.query('SELECT count(*)::int AS n FROM users');
-  assert.equal(rows[0].n, 2);
+  assert.equal(rows[0].n, 4);
 });
 
 test('rows inserted without the new store columns get safe defaults (DB team seeds stay valid)', async (t) => {
