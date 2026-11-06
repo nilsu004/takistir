@@ -22,17 +22,64 @@ export const demoAccounts = [
     role: 'product-manager',
     password: 'ManagerDemo!24',
   },
+  {
+    id: 'SM-001',
+    name: 'Sales Manager',
+    email: 'sales@takistir.local',
+    home: '',
+    taxId: '',
+    role: 'sales-manager',
+    password: 'SalesDemo!24',
+  },
+  {
+    id: 'SA-001',
+    name: 'Support Agent',
+    email: 'support@takistir.local',
+    home: '',
+    taxId: '',
+    role: 'support-agent',
+    password: 'SupportDemo!24',
+  },
 ];
+
+// Backfill missing local test roles without resetting any existing account.
+// Conflicting IDs or emails are left alone; never turn an existing user into staff.
+async function seedDemoAccounts(c) {
+  for (const u of demoAccounts) {
+    const existing = await c.query(
+      'SELECT 1 FROM users WHERE id = $1 OR email = $2',
+      [u.id, u.email],
+    );
+    if (existing.rowCount) continue;
+    await c.query(
+      `INSERT INTO users (id, name, email, home_address, tax_id, role, password_hash)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
+      [
+        u.id,
+        u.name,
+        u.email,
+        u.home,
+        u.taxId,
+        u.role,
+        passwordHash(u.password),
+      ],
+    );
+  }
+}
 
 /**
  * Loads the storefront demo catalogue, accounts, orders and reviews into an
  * empty database (the same data the former SQLite adapter created).
- * Does nothing when any user already exists. Returns true if it seeded.
+ * Existing databases only get missing local demo accounts; their catalogue and
+ * account values are preserved. Returns true only when the catalogue is seeded.
  */
 export async function seedDemoData(db) {
   return db.tx(async (c) => {
     await c.query('LOCK TABLE users IN EXCLUSIVE MODE');
-    if ((await c.query('SELECT 1 FROM users LIMIT 1')).rowCount) return false;
+    const populated =
+      (await c.query('SELECT 1 FROM users LIMIT 1')).rowCount > 0;
+    await seedDemoAccounts(c);
+    if (populated) return false;
 
     const categoryIds = new Map();
     for (const name of initialCategories) {
@@ -76,21 +123,6 @@ export async function seedDemoData(db) {
       );
       productIds.set(p.id, rows[0].id);
     }
-
-    for (const u of demoAccounts)
-      await c.query(
-        `INSERT INTO users (id, name, email, home_address, tax_id, role, password_hash)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [
-          u.id,
-          u.name,
-          u.email,
-          u.home,
-          u.taxId,
-          u.role,
-          passwordHash(u.password),
-        ],
-      );
 
     // Inserted oldest-first so the history (newest first) keeps the seed order.
     for (const o of [...initialOrders].reverse()) {
