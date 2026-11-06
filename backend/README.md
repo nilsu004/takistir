@@ -63,6 +63,9 @@ Every change runs in one PostgreSQL transaction (`src/db.js`, `tx`); if any step
 
 ## Cart (SCRUM-49)
 
+The [cart data model and database acceptance checks](../docs/cart-schema.md)
+document the SCRUM-48 schema used by this API.
+
 Guests and signed-in customers each have one cart; staff accounts have none (403). Every cart endpoint returns:
 
 ```json
