@@ -52,3 +52,14 @@ File details are in the [frontend README](frontend/README.md) and [backend READM
 ## Planning
 
 We track tasks and sprints in [Jira](https://watchstore.atlassian.net/jira/software/projects/SCRUM/boards/1/backlog). The [requirements checklist](docs/requirements.md) covers the course features and demo expectations, based on the [course guideline](docs/course-guideline.txt).
+
+## Local database
+
+The project uses PostgreSQL running in Docker.
+
+1. Install and open Docker Desktop.
+2. Start the database: `docker compose up -d`
+3. Copy the environment file: `cp backend/.env.example backend/.env`
+4. Stop the database when you are done: `docker compose down`
+
+The credentials in `docker-compose.yml` are for local development only.
