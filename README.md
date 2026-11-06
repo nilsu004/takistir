@@ -2,7 +2,7 @@
 
 An accessories e-commerce website for our CS308 course project, focused on watches and other accessories.
 
-We're using React and Vite for the frontend, and Node.js with Express for the backend. The basic setup is ready; store features and the database are still to be developed.
+We're using React and Vite for the frontend, Node.js with Express for the backend, and PostgreSQL 17 for data. Schema migrations are in [backend/db](backend/db/README.md) and run automatically when the API starts. See [ONIZLEME.md](ONIZLEME.md) for the Turkish preview guide and current limitations.
 
 ## Team
 
@@ -24,9 +24,9 @@ npm ci
 npm run dev
 ```
 
-Open <http://127.0.0.1:5173>. Both the frontend and backend start with this command. The page should show **API connected**.
+Open <http://127.0.0.1:5173>. Both the frontend and backend start with this command. The preview uses sample data and does not require the backend. To run the preview on its own at port 5174, use `npm run dev --workspace frontend -- --port 5174`.
 
-Stop with `Ctrl+C`. Restart after changing backend code; frontend changes reload automatically. No `.env` file or database is needed for the current setup.
+Stop with `Ctrl+C`. Restart after changing backend code; frontend changes reload automatically. No `.env` file, Docker or separately installed database is needed for local testing: without `DATABASE_URL` the API starts its own PostgreSQL 17 in `backend/data/postgres`. To use the team Docker database instead, set `DATABASE_URL`. Database migrations run and known test accounts are seeded on first startup (never in production). See [backend setup](backend/README.md) and the [integration test guide](PRODUCT_MANAGER_DEMO.md).
 
 ## Project structure
 
@@ -40,13 +40,14 @@ File details are in the [frontend README](frontend/README.md) and [backend READM
 
 ## Useful commands
 
-| Command                | Purpose                            |
-| ---------------------- | ---------------------------------- |
-| `npm run dev:frontend` | Run only the frontend              |
-| `npm run dev:backend`  | Run only the backend               |
-| `npm run build`        | Build the frontend                 |
-| `npm run check`        | Check syntax, build and formatting |
-| `npm run format`       | Format the code                    |
+| Command                | Purpose                                   |
+| ---------------------- | ----------------------------------------- |
+| `npm run dev:frontend` | Run only the frontend                     |
+| `npm run dev:backend`  | Run only the backend                      |
+| `npm run build`        | Build the frontend                        |
+| `npm test`             | Run API integration and shared rule tests |
+| `npm run check`        | Run tests, build and formatting checks    |
+| `npm run format`       | Format the code                           |
 
 ## Planning
 
