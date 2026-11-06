@@ -1,6 +1,6 @@
--- SCRUM-48 cart schema as agreed by the team (owner: Mahmut).
--- Added with SCRUM-49 so the cart API can be built and tested in parallel;
--- replace this file with Mahmut's version if it differs before merging.
+-- SCRUM-48 cart schema (owner: Mahmut), introduced alongside the SCRUM-49 API.
+-- Model and constraint verification: docs/cart-schema.md and
+-- backend/test/cart-schema.test.js. Keep applied migration SQL unchanged.
 BEGIN;
 
 -- A cart belongs to exactly one owner: a signed-in customer or a guest.
