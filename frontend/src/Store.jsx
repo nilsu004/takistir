@@ -1,11 +1,11 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { api } from './api.js';
+import { createCartClient } from './cart/cart-client.js';
+import { submitCredentials } from './auth/model.js';
+import { createCheckoutClient } from './checkout/checkout-client.js';
+import { StoreContext } from './store-context.js';
 
-const StoreContext = createContext(null);
-const defaultCart = [
-  { id: 'TK-001', qty: 1 },
-  { id: 'TK-002', qty: 1 },
-];
+export { useStore } from './store-context.js';
 function readSaved(key, fallback, validate) {
   try {
     const value = JSON.parse(localStorage.getItem(`takistir-preview:${key}`));
@@ -21,21 +21,27 @@ export function StoreProvider({ children }) {
   const pending = useRef(false);
   const epoch = useRef(0);
   const sequence = useRef(0);
-  const checkoutKey = useRef(null);
-  const [cart, setCart] = useState(() =>
-    readSaved(
-      'cart',
-      defaultCart,
-      (v) =>
-        Array.isArray(v) &&
-        v.every(
-          (i) =>
-            typeof i.id === 'string' &&
-            Number.isSafeInteger(i.qty) &&
-            i.qty > 0,
-        ),
-    ),
+  const sessionUser = useRef(null);
+  const [cartClient] = useState(() => createCartClient(api));
+  const [checkoutClient] = useState(() =>
+    createCheckoutClient({
+      request: api,
+      cart: cartClient,
+      getUser: () => sessionUser.current,
+      applyState: apply,
+    }),
   );
+  const checkout = useSyncExternalStore(
+    checkoutClient.subscribe,
+    checkoutClient.getSnapshot,
+  );
+  const cartState = useSyncExternalStore(
+    cartClient.subscribe,
+    cartClient.getSnapshot,
+  );
+  const cartItems = cartState.items;
+  const cart = cartItems.map(({ id, qty }) => ({ id, qty }));
+  const total = cartState.total;
   const [wishlist, setWishlist] = useState(() =>
     readSaved(
       'wishlist',
@@ -45,12 +51,19 @@ export function StoreProvider({ children }) {
   );
   const [address, setAddress] = useState(null);
   const [toast, setToast] = useState('');
+  const [authNotice, setAuthNotice] = useState(null);
   const [chatOpen, setChatOpen] = useState(false);
   const allProducts = snapshot?.products || [];
   const products = allProducts.filter((p) => !p.archived);
   const user = snapshot?.user || null;
 
   function apply(state) {
+    if (sessionUser.current?.id !== state.user?.id) checkoutClient.reset();
+    sessionUser.current = state.user;
+    cartClient.setOwner(state.user);
+    setAuthNotice((current) =>
+      current?.userId === state.user?.id ? current : null,
+    );
     setSnapshot((current) =>
       current &&
       current.user?.id === state.user?.id &&
@@ -60,7 +73,7 @@ export function StoreProvider({ children }) {
     );
   }
   async function refresh() {
-    if (pending.current) return;
+    if (pending.current || checkoutClient.getSnapshot().pending) return;
     const version = epoch.current;
     const request = ++sequence.current;
     try {
@@ -70,6 +83,9 @@ export function StoreProvider({ children }) {
       setConnectionError('');
     } catch (error) {
       if (version === epoch.current) setConnectionError(error.message);
+    } finally {
+      if (version === epoch.current && request === sequence.current)
+        cartClient.refresh();
     }
   }
   useEffect(() => {
@@ -79,18 +95,13 @@ export function StoreProvider({ children }) {
     window.addEventListener('focus', onFocus);
     return () => {
       epoch.current += 1;
+      cartClient.dispose();
       clearInterval(timer);
       window.removeEventListener('focus', onFocus);
     };
   }, []);
   useEffect(() => {
     if (!snapshot) return;
-    const ids = new Set(
-      snapshot.products
-        .filter((p) => !p.archived && p.price !== null)
-        .map((p) => p.id),
-    );
-    setCart((items) => items.filter((i) => ids.has(i.id)));
     const visible = new Set(
       snapshot.products.filter((p) => !p.archived).map((p) => p.id),
     );
@@ -98,11 +109,9 @@ export function StoreProvider({ children }) {
   }, [snapshot]);
   useEffect(() => {
     setAddress(null);
-    checkoutKey.current = null;
   }, [user?.id]);
   useEffect(() => {
     try {
-      localStorage.setItem('takistir-preview:cart', JSON.stringify(cart));
       localStorage.setItem(
         'takistir-preview:wishlist',
         JSON.stringify(wishlist),
@@ -110,7 +119,7 @@ export function StoreProvider({ children }) {
     } catch {
       /* Storage is optional. */
     }
-  }, [cart, wishlist]);
+  }, [wishlist]);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(''), 4000);
@@ -118,7 +127,11 @@ export function StoreProvider({ children }) {
   }, [toast]);
 
   async function mutate(path, method, body, message) {
-    if (pending.current)
+    if (
+      pending.current ||
+      cartClient.getSnapshot().pending ||
+      checkoutClient.getSnapshot().pending
+    )
       return { error: 'Please wait for the current request to finish.' };
     pending.current = true;
     epoch.current += 1;
@@ -126,6 +139,7 @@ export function StoreProvider({ children }) {
     try {
       const response = await api(path, { method, body });
       apply(response.state);
+      await cartClient.refresh();
       setConnectionError('');
       if (message) setToast(message);
       return { data: response.data, state: response.state, error: '' };
@@ -234,17 +248,27 @@ export function StoreProvider({ children }) {
       )
     ).error;
   }
-  async function login(email, password, registerName) {
-    return mutate(
-      registerName !== undefined ? '/auth/register' : '/auth/login',
-      'POST',
-      {
-        email,
-        password,
-        ...(registerName !== undefined ? { name: registerName } : {}),
-      },
-      'Signed in.',
+  async function login(email, password, registerName, confirmation, home) {
+    const result = await submitCredentials(
+      { email, password, name: registerName, confirmation, home },
+      mutate,
     );
+    if (result.error) return result;
+    const cartError =
+      result.state.user.role === 'customer'
+        ? cartClient.getSnapshot().syncError
+        : '';
+    const message = [
+      result.notice,
+      result.profileError,
+      cartError
+        ? 'You are signed in, but your cart could not be loaded. Open your cart and retry.'
+        : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+    setAuthNotice(message ? { userId: result.state.user.id, message } : null);
+    return { ...result, cartError };
   }
   async function logout() {
     return (await mutate('/auth/logout', 'POST', {}, 'Signed out.')).error;
@@ -252,67 +276,61 @@ export function StoreProvider({ children }) {
   async function updateProfile(fields) {
     return (await mutate('/profile', 'PATCH', fields, 'Profile saved.')).error;
   }
-  function addToCart(id, qty = 1) {
-    const product = products.find((p) => p.id === id);
-    if (
-      !product ||
-      product.price === null ||
-      !Number.isSafeInteger(qty) ||
-      qty < 1
-    ) {
-      setToast('This product is not available to purchase.');
-      return;
+  async function cartAction(action, message) {
+    if (pending.current) {
+      setToast('Please wait for the current request to finish.');
+      return false;
     }
-    setCart((items) => {
-      const current = items.find((i) => i.id === id)?.qty || 0;
-      if (current + qty > product.stock) return items;
-      return items.some((i) => i.id === id)
-        ? items.map((i) => (i.id === id ? { ...i, qty: i.qty + qty } : i))
-        : [...items, { id, qty }];
-    });
-    const existing = cart.find((i) => i.id === id)?.qty || 0;
-    setToast(
-      existing + qty > product.stock
-        ? 'The requested quantity is not available.'
-        : `${product.name} added to your cart.`,
+    if (
+      checkoutClient.getSnapshot().pending ||
+      checkoutClient.getSnapshot().uncertain ||
+      checkoutClient.getSnapshot().cleanupError
+    ) {
+      setToast('Resolve your previous checkout before changing your cart.');
+      return false;
+    }
+    const result = await action();
+    setToast(result.error || message);
+    return !result.error;
+  }
+  function addToCart(id, qty = 1) {
+    return cartAction(
+      () => cartClient.add(id, qty),
+      'Product added to your cart.',
     );
   }
   function updateQuantity(id, qty) {
-    const product = products.find((p) => p.id === id);
-    if (!Number.isSafeInteger(qty) || qty < 0) return;
-    if (qty === 0) {
-      setCart((items) => items.filter((i) => i.id !== id));
-      return;
-    }
-    if (!product || qty > product.stock) {
-      setToast('No more stock is available.');
-      return;
-    }
-    setCart((items) => items.map((i) => (i.id === id ? { ...i, qty } : i)));
+    return cartAction(
+      () => cartClient.setQuantity(id, qty),
+      qty === 0 ? 'Product removed from your cart.' : 'Cart updated.',
+    );
+  }
+  function clearCart() {
+    return cartAction(() => cartClient.clear(), 'Cart cleared.');
   }
   function toggleWishlist(id) {
     setWishlist((items) =>
       items.includes(id) ? items.filter((item) => item !== id) : [...items, id],
     );
   }
-  async function placeOrder() {
-    if (!cart.length || !address || user?.role !== 'customer') {
-      setToast('Sign in with a customer account and enter a delivery address.');
-      return null;
+  async function placeOrder(reviewedQuote) {
+    if (
+      pending.current ||
+      cartClient.getSnapshot().pending ||
+      checkoutClient.getSnapshot().pending
+    )
+      return { error: 'Please wait for the current request to finish.' };
+    pending.current = true;
+    epoch.current += 1;
+    try {
+      const result = await checkoutClient.submit(address, reviewedQuote);
+      if (result.order) setToast(`Order ${result.order.id} confirmed.`);
+      else if (result.error) setToast(result.error);
+      return result;
+    } finally {
+      pending.current = false;
+      refresh();
     }
-    const payload = JSON.stringify({ items: cart, address });
-    if (!checkoutKey.current || checkoutKey.current.payload !== payload)
-      checkoutKey.current = { payload, key: crypto.randomUUID() };
-    const result = await mutate(
-      '/orders',
-      'POST',
-      { items: cart, address, key: checkoutKey.current.key },
-      'Order placed.',
-    );
-    if (result.error) return null;
-    setCart([]);
-    checkoutKey.current = null;
-    return result.state.orders.find((o) => o.id === result.data);
   }
   async function cancelOrder(id) {
     return (
@@ -334,11 +352,6 @@ export function StoreProvider({ children }) {
       )
     ).error;
   }
-  const cartItems = cart.flatMap((item) => {
-    const p = products.find((p) => p.id === item.id);
-    return p && p.price !== null ? [{ ...p, qty: item.qty }] : [];
-  });
-  const total = cartItems.reduce((sum, i) => sum + i.price * i.qty, 0);
   return (
     <StoreContext.Provider
       value={{
@@ -362,6 +375,14 @@ export function StoreProvider({ children }) {
         cart,
         cartItems,
         total,
+        cartReady: cartState.ready,
+        cartEnabled: cartState.enabled,
+        cartLoading: cartState.loading,
+        cartBusy: cartState.pending,
+        cartError: cartState.error || cartState.syncError || connectionError,
+        cartSyncError: cartState.syncError || connectionError,
+        refreshCart: () => cartClient.refresh({ clearError: true }),
+        clearCart,
         wishlist,
         address,
         setAddress,
@@ -369,13 +390,16 @@ export function StoreProvider({ children }) {
         updateQuantity,
         toggleWishlist,
         placeOrder,
+        checkout,
+        retryCheckoutCleanup: checkoutClient.retryCleanup,
+        acknowledgeCheckout: checkoutClient.acknowledgeReview,
         cancelOrder,
         requestReturn,
         toast,
         setToast,
         chatOpen,
         setChatOpen,
-        busy,
+        busy: busy || cartState.pending || checkout.pending,
         connectionError,
       }}
     >
@@ -384,6 +408,18 @@ export function StoreProvider({ children }) {
           {connectionError && (
             <div className="notice" role="alert">
               {connectionError} Displayed data may be stale.
+            </div>
+          )}
+          {authNotice && (
+            <div className="notice auth-notice" role="status">
+              <p>{authNotice.message}</p>
+              <button
+                className="text-button"
+                aria-label="Dismiss account notification"
+                onClick={() => setAuthNotice(null)}
+              >
+                Dismiss
+              </button>
             </div>
           )}
           {children}
@@ -401,7 +437,4 @@ export function StoreProvider({ children }) {
       )}
     </StoreContext.Provider>
   );
-}
-export function useStore() {
-  return useContext(StoreContext);
 }

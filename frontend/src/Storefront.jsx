@@ -6,7 +6,6 @@ import {
   ProductArt,
   ProductGrid,
   Quantity,
-  Summary,
 } from './components.jsx';
 import { money } from './data.js';
 import { publishedRating } from './manager/model.js';
@@ -319,77 +318,7 @@ export function Product({ id }) {
   );
 }
 
-export function Cart() {
-  const { cartItems, updateQuantity, user } = useStore();
-  if (!cartItems.length)
-    return (
-      <main className="container page">
-        <EmptyState title="Your cart is empty">
-          Add an accessory to start your order.
-        </EmptyState>
-      </main>
-    );
-  return (
-    <main className="container page">
-      <p className="breadcrumb">
-        <a href="#/">Home</a> / Cart
-      </p>
-      <h1>Cart</h1>
-      <div className="checkout-layout">
-        <section className="cart-items" aria-label="Cart items">
-          {cartItems.map((item) => (
-            <article className="cart-item" key={item.id}>
-              <a href={`#/product/${item.id}`}>
-                <ProductArt product={item} />
-              </a>
-              <div className="cart-item-copy">
-                <h2>
-                  <a href={`#/product/${item.id}`}>{item.name}</a>
-                </h2>
-                <p className="muted">
-                  {item.category} · {money(item.price)}
-                </p>
-                <Quantity
-                  label={`${item.name} quantity`}
-                  value={item.qty}
-                  max={item.stock}
-                  onChange={(value) => updateQuantity(item.id, value)}
-                />
-                <button
-                  className="text-button remove-item"
-                  onClick={() => updateQuantity(item.id, 0)}
-                >
-                  Remove
-                </button>
-              </div>
-              <strong>{money(item.qty * item.price)}</strong>
-            </article>
-          ))}
-          <a className="text-button" href="#/catalog">
-            ← Continue shopping
-          </a>
-        </section>
-        <Summary>
-          <a
-            className="button"
-            href={
-              user
-                ? '#/checkout/delivery'
-                : '#/login?next=%2Fcheckout%2Fdelivery'
-            }
-          >
-            Continue to checkout
-          </a>
-          {!user && (
-            <p className="muted small">
-              Sign in to continue. Your cart will be kept.
-            </p>
-          )}
-        </Summary>
-      </div>
-    </main>
-  );
-}
+export { Cart } from './cart/Cart.jsx';
 
 export function Wishlist() {
   const { products, wishlist } = useStore();
@@ -422,7 +351,7 @@ export function Info({ section }) {
     ],
     privacy: [
       'Privacy',
-      'Your cart and wishlist are stored in this browser. Account credentials are verified by the local API. Card details are never sent to or stored by the API.',
+      'Your cart is stored by the API; guests use a browser cookie and signed-in customers use their account. Your wishlist is stored in this browser. Card details are never sent to or stored by the API.',
     ],
   }[section];
   if (!content)
