@@ -17,7 +17,7 @@ Existing screens are extended in place. `Storefront.jsx` contains both catalog/r
 
 ## API handoff / remaining backend work
 
-1. PostgreSQL integration (SCRUM-133): replace the local SQLite adapter with the team's database/service implementation. SCRUM-134 provides local integration only. Preserve role/ownership checks, delivered-purchase review eligibility, stock transactions and revision semantics.
+1. PostgreSQL integration is now in `main` and has been merged into this branch. Public rating aggregates are computed from all PostgreSQL review rows while comment queries retain role/ownership filtering. No schema change is needed. The earlier SQLite validation below records the pre-merge implementation; post-merge validation is recorded separately.
 2. Public ratings: `/api/state` products include `publishedRating: { count, rating }`; `rating` is a one-decimal string or `No ratings yet`. Compute it server-side using all submitted ratings plus historical aggregates. Do not expose pending/rejected comments or customer IDs publicly. The frontend prefers this aggregate over its visible comment subset.
 3. Popularity: agree with backend/product owners on the production metric. Existing numeric fixture scores support demo sorting; no live sales metric is claimed.
 4. Nilsu's related dependencies: actual invoice PDF generation/email, production pricing and account services remain separate backend work. The local mock checkout and browser invoice already exist.
@@ -38,3 +38,9 @@ Existing screens are extended in place. `Storefront.jsx` contains both catalog/r
 - Isolated Chrome run with an in-memory database: guest search/filter/reload/back/forward, keyboard focus after sorting, sold-out purchase guard, live stock refresh and quantity clamping, customer review submission, manager approval/rejection/status filters, public approved text, missing product and empty search all pass. No page errors.
 - Catalog, product and moderation pages checked for document overflow at 320, 390, 768 and 1440 px; no horizontal overflow. Desktop/mobile screenshots inspected, with narrow review rows improved after inspection. This checks the implemented layout, not pixel-perfect Figma parity or a full accessibility audit.
 - Screenshot artifacts from the isolated run are under `/private/tmp/takistir-{catalog,product,manager}-{width}.png`; test data does not touch the working local database.
+
+## Validation after merging current main
+
+- `npm run check` passes on native embedded PostgreSQL: 69 tests, production build and repository formatting.
+- Repeated the isolated Chrome catalog/review flow against a fresh PostgreSQL database: URL filters/reload/back/forward and focus, sold-out guard, live stock clamping, review submission, approve/reject/status filters, missing/empty states and public comment publication all pass. No page errors or document overflow at 320/390/768/1440 px.
+- PostgreSQL migration/cart changes from `main` are preserved. This branch adds no migration and does not change the server cart/auth/checkout implementations.

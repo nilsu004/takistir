@@ -1,20 +1,18 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { createApp } from '../src/app.js';
-import { createStore } from '../src/store.js';
+import { createDb, migrate } from '../src/db.js';
+import { passwordMatches } from '../src/passwords.js';
+import { freshDb, stopServer } from './postgres.js';
+
+after(stopServer);
 
 async function fixture(t) {
-  const store = createStore(':memory:');
-  const server = createApp({ store }).listen(0, '127.0.0.1');
+  const { db } = await freshDb(t);
+  const server = createApp({ db }).listen(0, '127.0.0.1');
   await once(server, 'listening');
-  t.after(async () => {
-    await new Promise((resolve) => server.close(resolve));
-    store.close();
-  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
   const base = `http://127.0.0.1:${server.address().port}/api`;
   function client() {
     let cookie = '';
@@ -55,7 +53,7 @@ async function fixture(t) {
     ).status,
     200,
   );
-  return { store, client, manager, customer, guest };
+  return { db, client, manager, customer, guest };
 }
 const product = {
   id: 'TK-TEST',
@@ -462,25 +460,31 @@ test('only delivered purchases can be reviewed and moderation controls publicati
   );
 });
 
-test('state persists after reopening the local database and passwords are hashed', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'takistir-api-test-'));
-  const filename = join(dir, 'test.sqlite');
-  let store = createStore(filename);
+test('state persists after reconnecting to the database and passwords are hashed', async (t) => {
+  const { db, url } = await freshDb(t);
+  await db.query(
+    "UPDATE products SET stock_quantity = 7 WHERE code = 'TK-001'",
+  );
+  await db.query("INSERT INTO categories (name) VALUES ('Watches')");
+  const { rows } = await db.query(
+    "SELECT password_hash FROM users WHERE email = 'deniz@example.com'",
+  );
+  assert(!rows[0].password_hash.includes('CustomerDemo'));
+  assert.match(rows[0].password_hash, /^[a-f0-9]+:[a-f0-9]+$/);
+  assert(passwordMatches('CustomerDemo!24', rows[0].password_hash));
+  const reopened = createDb(url, { max: 1 });
   try {
-    store.write((s) => {
-      s.products[0].stock = 7;
-      s.categories.push('Watches');
-    });
-    const hash = store.read().users[0].passwordHash;
-    assert(!hash.includes('CustomerDemo'));
-    assert.match(hash, /^[a-f0-9]+:[a-f0-9]+$/);
-    store.close();
-    store = createStore(filename);
-    assert.equal(store.read().products[0].stock, 7);
-    assert(store.read().categories.includes('Watches'));
+    assert.deepEqual(await migrate(reopened), []);
+    const stock = await reopened.query(
+      "SELECT stock_quantity FROM products WHERE code = 'TK-001'",
+    );
+    assert.equal(stock.rows[0].stock_quantity, 7);
+    const watches = await reopened.query(
+      "SELECT 1 FROM categories WHERE name = 'Watches'",
+    );
+    assert.equal(watches.rowCount, 1);
   } finally {
-    store.close();
-    rmSync(dir, { recursive: true, force: true });
+    await reopened.close();
   }
 });
 
