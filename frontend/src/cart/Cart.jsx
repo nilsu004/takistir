@@ -24,6 +24,7 @@ export function Cart() {
     cartBusy,
     cartError,
     refreshCart,
+    checkout,
   } = useStore();
   const [confirmClear, setConfirmClear] = useState(false);
   if (!cartEnabled)
@@ -41,6 +42,8 @@ export function Cart() {
     );
 
   const unavailable = cartItems.some((item) => !item.available);
+  const locked =
+    checkout.pending || checkout.uncertain || !!checkout.cleanupError;
   return (
     <main
       className="container page cart-page"
@@ -62,6 +65,21 @@ export function Cart() {
           <Button secondary disabled={cartLoading} onClick={refreshCart}>
             Retry
           </Button>
+        </Notice>
+      )}
+      {locked && (
+        <Notice>
+          Finish checking your previous order before changing this cart.{' '}
+          <a
+            className="text-button"
+            href={
+              checkout.order
+                ? `#/confirmation/${checkout.order.id}`
+                : '#/checkout/payment'
+            }
+          >
+            Review previous checkout
+          </a>
         </Notice>
       )}
       <p className="sr-only" role="status">
@@ -119,6 +137,7 @@ export function Cart() {
                       max={item.stock}
                       disabled={
                         busy ||
+                        locked ||
                         cartLoading ||
                         item.stock === 0 ||
                         item.price === null
@@ -131,7 +150,7 @@ export function Cart() {
                         <Button
                           secondary
                           className="cart-adjust"
-                          disabled={cartLoading}
+                          disabled={cartLoading || locked}
                           onClick={() => updateQuantity(item.id, item.stock)}
                         >
                           Use available stock ({item.stock})
@@ -139,7 +158,7 @@ export function Cart() {
                       )}
                     <button
                       className="text-button remove-item"
-                      disabled={busy || cartLoading}
+                      disabled={busy || cartLoading || locked}
                       onClick={() => updateQuantity(item.id, 0)}
                     >
                       Remove<span className="sr-only"> {item.name}</span>
@@ -158,7 +177,7 @@ export function Cart() {
                 </a>
                 <button
                   className="text-button"
-                  disabled={busy || cartLoading}
+                  disabled={busy || cartLoading || locked}
                   onClick={() => setConfirmClear(true)}
                 >
                   Clear cart
@@ -173,7 +192,7 @@ export function Cart() {
                   <p>Your cart will be emptied.</p>
                   <div className="button-row">
                     <Button
-                      disabled={cartLoading}
+                      disabled={cartLoading || locked}
                       onClick={async () => {
                         if (await clearCart()) setConfirmClear(false);
                       }}
@@ -189,7 +208,7 @@ export function Cart() {
             </section>
             <Summary>
               <Button
-                disabled={unavailable || !!cartError || cartLoading}
+                disabled={unavailable || !!cartError || cartLoading || locked}
                 onClick={() =>
                   navigate(
                     user

@@ -1,219 +1,11 @@
-import { useState } from 'react';
-import { Button, EmptyState, Field, Notice, Summary } from './components.jsx';
-import { money, navigate } from './data.js';
+import { Button, EmptyState, Notice } from './components.jsx';
+import { money } from './data.js';
 import { useStore } from './Store.jsx';
 
-export function Checkout({ step }) {
-  const {
-    user,
-    cartItems,
-    address,
-    setAddress,
-    total,
-    placeOrder,
-    cartEnabled,
-    cartReady,
-    cartSyncError,
-  } = useStore();
-  const [paymentFailed, setPaymentFailed] = useState(false);
-  if (cartEnabled && !cartReady && !cartSyncError)
-    return (
-      <main className="container page">
-        <p role="status">Loading your cart…</p>
-      </main>
-    );
-  if (cartSyncError || cartItems.some((item) => !item.available))
-    return (
-      <main className="container page">
-        <EmptyState
-          title="Please review your cart"
-          href="#/cart"
-          action="Back to cart"
-        >
-          {cartSyncError ||
-            'Some items are no longer available in the requested quantity.'}
-        </EmptyState>
-      </main>
-    );
-  if (!cartItems.length)
-    return (
-      <main className="container page">
-        <EmptyState title="Your cart is empty">
-          Add products before checking out.
-        </EmptyState>
-      </main>
-    );
-  if (!user || user.role !== 'customer')
-    return (
-      <main className="container page">
-        <EmptyState
-          title="Sign in as a customer to continue"
-          action="Sign in"
-          href="#/login?next=%2Fcheckout%2Fdelivery"
-        >
-          Your cart is ready and will be kept when you sign in.
-        </EmptyState>
-      </main>
-    );
-  const payment = step === 'payment' && address;
-  return (
-    <main className="container page">
-      <p className="breadcrumb">
-        <a href="#/cart">Cart</a> / <a href="#/checkout/delivery">Delivery</a> /
-        Payment
-      </p>
-      <h1>{payment ? 'Payment' : 'Delivery address'}</h1>
-      <Notice>
-        Demo checkout — no payment is processed and no card details are saved.
-      </Notice>
-      <div className="checkout-layout">
-        {payment ? (
-          <section>
-            {paymentFailed && (
-              <Notice error>
-                <strong>Payment failed</strong>
-                <p>
-                  No charge was made. Check your card details and try again.
-                </p>
-                <p>Your cart and delivery address have been kept.</p>
-              </Notice>
-            )}
-            <form
-              className="panel form-stack"
-              onSubmit={async (event) => {
-                event.preventDefault();
-                const order = await placeOrder();
-                if (order) navigate(`/confirmation/${order.id}`);
-              }}
-            >
-              <Field
-                label="Cardholder name"
-                name="cardholder"
-                autoComplete="off"
-                defaultValue={user.name}
-                required
-              />
-              <Field
-                label="Card number"
-                name="cardnumber"
-                inputMode="numeric"
-                autoComplete="off"
-                placeholder="4242 4242 4242 4242"
-                pattern="[0-9 ]{13,23}"
-                title="Use a sample card number with 13–19 digits."
-                maxLength={23}
-                required
-              />
-              <div className="form-row">
-                <Field
-                  label="Expiry date"
-                  name="expiry"
-                  placeholder="MM / YY"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  pattern="(0[1-9]|1[0-2])\s?/?\s?[0-9]{2}"
-                  title="Enter an expiry date in MM / YY format."
-                  required
-                />
-                <Field
-                  label="Security code"
-                  name="securitycode"
-                  placeholder="123"
-                  type="password"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  pattern="[0-9]{3,4}"
-                  maxLength={4}
-                  required
-                />
-              </div>
-              <Button type="submit">
-                {paymentFailed ? 'Try payment again' : 'Pay'} · {money(total)}
-              </Button>
-              <a className="text-button" href="#/checkout/delivery">
-                ← Back to delivery
-              </a>
-            </form>
-            <details className="preview-tools">
-              <summary>Preview payment error</summary>
-              <p>Show the failed-payment state without submitting the form.</p>
-              <Button secondary onClick={() => setPaymentFailed(true)}>
-                Show payment failed
-              </Button>
-            </details>
-          </section>
-        ) : (
-          <form
-            className="panel form-stack"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const data = new FormData(event.currentTarget);
-              setAddress(Object.fromEntries(data));
-              navigate('/checkout/payment');
-            }}
-          >
-            <Field
-              label="Full name"
-              name="name"
-              autoComplete="name"
-              defaultValue={address?.name || user.name}
-              required
-            />
-            <Field
-              label="Street address"
-              name="street"
-              autoComplete="street-address"
-              defaultValue={address?.street || ''}
-              required
-            />
-            <div className="form-row">
-              <Field
-                label="City"
-                name="city"
-                autoComplete="address-level2"
-                defaultValue={address?.city || ''}
-                required
-              />
-              <Field
-                label="Postcode"
-                name="postcode"
-                autoComplete="postal-code"
-                defaultValue={address?.postcode || ''}
-                required
-              />
-            </div>
-            <Field
-              label="Phone"
-              name="phone"
-              type="tel"
-              autoComplete="tel"
-              defaultValue={address?.phone || ''}
-              required
-            />
-            <Button type="submit">Continue to payment</Button>
-          </form>
-        )}
-        <Summary>
-          {address && (
-            <div className="delivery-summary">
-              <h3>Delivery to</h3>
-              <p>
-                {address.name}
-                <br />
-                {address.street}
-                <br />
-                {address.city} {address.postcode}
-              </p>
-            </div>
-          )}
-        </Summary>
-      </div>
-    </main>
-  );
-}
+export { Checkout } from './checkout/Checkout.jsx';
 
 export function Confirmation({ id }) {
-  const { orders } = useStore();
+  const { orders, checkout, retryCheckoutCleanup } = useStore();
   const order = orders.find((item) => item.id === id);
   if (!order)
     return (
@@ -237,6 +29,33 @@ export function Confirmation({ id }) {
         This is a local preview. No payment was collected and no invoice email
         was sent.
       </Notice>
+      <div className="panel">
+        <h2>Confirmed total</h2>
+        <strong>
+          {money(
+            order.items.reduce(
+              (sum, item) => sum + Math.round(item.price * 100) * item.qty,
+              0,
+            ) / 100,
+          )}
+        </strong>
+      </div>
+      {checkout.order?.id === id && checkout.priceWarning && (
+        <Notice>{checkout.priceWarning}</Notice>
+      )}
+      {checkout.order?.id === id && checkout.cleanupError && (
+        <Notice error>
+          <strong>Your order is confirmed, but the cart needs updating</strong>
+          <p>{checkout.cleanupError}</p>
+          <p>
+            Retrying this step only updates the cart; it does not place another
+            order.
+          </p>
+          <Button secondary onClick={retryCheckoutCleanup}>
+            {checkout.pending ? 'Updating cart…' : 'Retry cart cleanup'}
+          </Button>
+        </Notice>
+      )}
       <div className="button-row">
         <a className="button" href={`#/orders/${id}`}>
           View order

@@ -23,4 +23,6 @@ The cart supports API-backed additions, quantity changes, removal and clearing, 
 
 Login and registration include field validation, password confirmation/visibility, guest-cart merge feedback and safe return navigation. See [SCRUM-53 verification and backend boundaries](../docs/SCRUM-53-auth.md), including the remaining tax-ID registration API requirement.
 
+Checkout validates the delivery address, refreshes/reviews the API cart before ordering, prevents overlapping submissions and supports safe order-confirmation/cart-cleanup retries. See [SCRUM-56 verification and backend boundaries](../docs/SCRUM-56-checkout.md).
+
 See [integration scenarios and limits](../PRODUCT_MANAGER_DEMO.md), [local API details](../backend/README.md) and the [main README](../README.md). Build with `npm run build` and run the complete checks with `npm run check` from the repository root.

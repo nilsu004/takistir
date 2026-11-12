@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { api } from './api.js';
 import { createCartClient } from './cart/cart-client.js';
 import { submitCredentials } from './auth/model.js';
+import { createCheckoutClient } from './checkout/checkout-client.js';
 import { StoreContext } from './store-context.js';
 
 export { useStore } from './store-context.js';
@@ -20,8 +21,20 @@ export function StoreProvider({ children }) {
   const pending = useRef(false);
   const epoch = useRef(0);
   const sequence = useRef(0);
-  const checkoutKey = useRef(null);
+  const sessionUser = useRef(null);
   const [cartClient] = useState(() => createCartClient(api));
+  const [checkoutClient] = useState(() =>
+    createCheckoutClient({
+      request: api,
+      cart: cartClient,
+      getUser: () => sessionUser.current,
+      applyState: apply,
+    }),
+  );
+  const checkout = useSyncExternalStore(
+    checkoutClient.subscribe,
+    checkoutClient.getSnapshot,
+  );
   const cartState = useSyncExternalStore(
     cartClient.subscribe,
     cartClient.getSnapshot,
@@ -45,6 +58,8 @@ export function StoreProvider({ children }) {
   const user = snapshot?.user || null;
 
   function apply(state) {
+    if (sessionUser.current?.id !== state.user?.id) checkoutClient.reset();
+    sessionUser.current = state.user;
     cartClient.setOwner(state.user);
     setAuthNotice((current) =>
       current?.userId === state.user?.id ? current : null,
@@ -58,7 +73,7 @@ export function StoreProvider({ children }) {
     );
   }
   async function refresh() {
-    if (pending.current) return;
+    if (pending.current || checkoutClient.getSnapshot().pending) return;
     const version = epoch.current;
     const request = ++sequence.current;
     try {
@@ -94,7 +109,6 @@ export function StoreProvider({ children }) {
   }, [snapshot]);
   useEffect(() => {
     setAddress(null);
-    checkoutKey.current = null;
   }, [user?.id]);
   useEffect(() => {
     try {
@@ -113,7 +127,11 @@ export function StoreProvider({ children }) {
   }, [toast]);
 
   async function mutate(path, method, body, message) {
-    if (pending.current || cartClient.getSnapshot().pending)
+    if (
+      pending.current ||
+      cartClient.getSnapshot().pending ||
+      checkoutClient.getSnapshot().pending
+    )
       return { error: 'Please wait for the current request to finish.' };
     pending.current = true;
     epoch.current += 1;
@@ -263,6 +281,14 @@ export function StoreProvider({ children }) {
       setToast('Please wait for the current request to finish.');
       return false;
     }
+    if (
+      checkoutClient.getSnapshot().pending ||
+      checkoutClient.getSnapshot().uncertain ||
+      checkoutClient.getSnapshot().cleanupError
+    ) {
+      setToast('Resolve your previous checkout before changing your cart.');
+      return false;
+    }
     const result = await action();
     setToast(result.error || message);
     return !result.error;
@@ -287,40 +313,24 @@ export function StoreProvider({ children }) {
       items.includes(id) ? items.filter((item) => item !== id) : [...items, id],
     );
   }
-  async function placeOrder() {
+  async function placeOrder(reviewedQuote) {
     if (
-      !cartState.ready ||
-      cartState.syncError ||
-      connectionError ||
-      cartState.loading ||
-      cartState.pending ||
-      cartItems.some((item) => !item.available)
-    ) {
-      setToast('Please review your cart before placing an order.');
-      return null;
+      pending.current ||
+      cartClient.getSnapshot().pending ||
+      checkoutClient.getSnapshot().pending
+    )
+      return { error: 'Please wait for the current request to finish.' };
+    pending.current = true;
+    epoch.current += 1;
+    try {
+      const result = await checkoutClient.submit(address, reviewedQuote);
+      if (result.order) setToast(`Order ${result.order.id} confirmed.`);
+      else if (result.error) setToast(result.error);
+      return result;
+    } finally {
+      pending.current = false;
+      refresh();
     }
-    if (!cart.length || !address || user?.role !== 'customer') {
-      setToast('Sign in with a customer account and enter a delivery address.');
-      return null;
-    }
-    const payload = JSON.stringify({ items: cart, address });
-    if (!checkoutKey.current || checkoutKey.current.payload !== payload)
-      checkoutKey.current = { payload, key: crypto.randomUUID() };
-    const result = await mutate(
-      '/orders',
-      'POST',
-      { items: cart, address, key: checkoutKey.current.key },
-      'Order placed.',
-    );
-    if (result.error) return null;
-    // SCRUM-55 will make order creation and server-cart clearing atomic.
-    const cleared = await cartClient.clear();
-    if (cleared.error)
-      setToast(
-        `Order placed, but the cart could not be cleared: ${cleared.error}`,
-      );
-    if (!cleared.error) checkoutKey.current = null;
-    return result.state.orders.find((o) => o.id === result.data);
   }
   async function cancelOrder(id) {
     return (
@@ -380,13 +390,16 @@ export function StoreProvider({ children }) {
         updateQuantity,
         toggleWishlist,
         placeOrder,
+        checkout,
+        retryCheckoutCleanup: checkoutClient.retryCleanup,
+        acknowledgeCheckout: checkoutClient.acknowledgeReview,
         cancelOrder,
         requestReturn,
         toast,
         setToast,
         chatOpen,
         setChatOpen,
-        busy: busy || cartState.pending,
+        busy: busy || cartState.pending || checkout.pending,
         connectionError,
       }}
     >

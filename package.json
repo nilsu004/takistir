@@ -19,7 +19,7 @@
     "check": "node --check backend/src/index.js && npm test && npm run build && npm run format:check",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "node --test backend/test/*.test.js frontend/src/manager/model.test.js frontend/src/cart/*.test.js frontend/src/auth/*.test.js"
+    "test": "node --test backend/test/*.test.js frontend/src/manager/model.test.js frontend/src/cart/*.test.js frontend/src/auth/*.test.js frontend/src/checkout/*.test.js"
   },
   "devDependencies": {
     "concurrently": "10.0.6",
