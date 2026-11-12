@@ -1,6 +1,6 @@
 # Course requirements and implementation checklist
 
-Source: [original pasted course guideline](course-guideline.txt). This is a planning aid; store functionality is pending. The scaffold health endpoint is not a completed course feature.
+Source: [original pasted course guideline](course-guideline.txt). This is a course-level acceptance checklist. Local storefront/manager integration exists; unchecked items still need end-to-end acceptance and team review. See [Sprint 2–3 frontend notes](sprint-2-3-frontend.md) for the current scope and backend gaps.
 
 The selected product domain is accessories, including watches and other accessory categories.
 

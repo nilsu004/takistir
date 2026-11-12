@@ -1321,3 +1321,85 @@ td {
     transition: none !important;
   }
 }
+
+/* Product data and customer text must fit narrow screens. */
+.product-information,
+.product-card,
+.search {
+  min-width: 0;
+}
+.product-information h1,
+.product-specs,
+.product-card h3,
+.review-comment {
+  overflow-wrap: anywhere;
+}
+.review-comment {
+  white-space: pre-wrap;
+}
+@media (max-width: 800px) {
+  .account-nav {
+    flex-wrap: wrap;
+  }
+  .product-actions {
+    flex-wrap: wrap;
+  }
+  .reviews-section table {
+    table-layout: fixed;
+    width: 100%;
+  }
+  .reviews-section th:first-child {
+    width: 24%;
+  }
+  .reviews-section th:last-child {
+    width: 27%;
+  }
+  .reviews-section td {
+    overflow-wrap: anywhere;
+  }
+}
+@media (max-width: 420px) {
+  .header-main {
+    grid-template-columns: 1fr;
+  }
+  .account-nav {
+    grid-row: 2;
+    justify-content: flex-start;
+  }
+  .search {
+    grid-row: 3;
+  }
+}
+
+@media (max-width: 420px) {
+  .reviews-section thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .reviews-section table,
+  .reviews-section tbody,
+  .reviews-section tr {
+    display: block;
+  }
+  .reviews-section tbody tr + tr {
+    border-top: 1px solid var(--line);
+  }
+  .reviews-section td {
+    display: block;
+    border: 0;
+    padding: 10px 12px;
+  }
+  .reviews-section td[data-label] {
+    display: grid;
+    grid-template-columns: 65px minmax(0, 1fr);
+    gap: 12px;
+  }
+  .reviews-section td[data-label]::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--wine);
+  }
+}

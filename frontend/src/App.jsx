@@ -29,7 +29,7 @@ function Router() {
       page = <ProductManager />;
       break;
     case 'catalog':
-      page = <Catalog key={hash} params={params} />;
+      page = <Catalog params={params} />;
       break;
     case 'product':
       page = <Product key={id} id={id} />;

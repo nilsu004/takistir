@@ -6,8 +6,8 @@ This folder contains the React application that runs in the user's browser. Vite
 
 - Home and product details use the Figma design's colors, fonts and original local SVG assets.
 - Catalog/search/sorting, cart, wishlist, demo login/registration, checkout, profile, orders, cancellation, item returns, invoice printing and demo chat can be explored.
-- Cart and wishlist persist in localStorage. Session, stock, orders and reviews reset on refresh.
-- This is a browser-only preview: no real authentication, payment, email, file upload, database or support agent connection. Manager screens are not implemented.
+- Cart and wishlist persist in localStorage. Accounts, stock, orders and reviews persist through the PostgreSQL API.
+- The local API provides session authentication, role checks and database persistence. Payment and chat are demos; email, file uploads and a real support agent are not connected. Product Manager screens are implemented.
 
 The Figma tool quota allowed detailed reads of Home and Product details only. Additional customer flows use the same visual language; they are not a pixel-exact conversion of every Figma screen. Read [the Turkish guide](../ONIZLEME.md) for an inspection walkthrough.
 

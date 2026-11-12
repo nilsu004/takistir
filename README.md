@@ -24,7 +24,7 @@ npm ci
 npm run dev
 ```
 
-Open <http://127.0.0.1:5173>. Both the frontend and backend start with this command. The preview uses sample data and does not require the backend. To run the preview on its own at port 5174, use `npm run dev --workspace frontend -- --port 5174`.
+Open <http://127.0.0.1:5173>. Both the frontend and backend start with this command and must run together. To use frontend port 5174, run `npm run dev --workspace frontend -- --port 5174` alongside the backend.
 
 Stop with `Ctrl+C`. Restart after changing backend code; frontend changes reload automatically. No `.env` file, Docker or separately installed database is needed for local testing: without `DATABASE_URL` the API starts its own PostgreSQL 17 in `backend/data/postgres`. To use the team Docker database instead, set `DATABASE_URL`. Database migrations run and known test accounts are seeded on first startup (never in production). See [backend setup](backend/README.md) and the [integration test guide](PRODUCT_MANAGER_DEMO.md).
 
@@ -52,3 +52,5 @@ File details are in the [frontend README](frontend/README.md) and [backend READM
 ## Planning
 
 We track tasks and sprints in [Jira](https://watchstore.atlassian.net/jira/software/projects/SCRUM/boards/1/backlog). The [requirements checklist](docs/requirements.md) covers the course features and demo expectations, based on the [course guideline](docs/course-guideline.txt).
+
+Catalog/review completion notes, shared-file boundaries and backend handoff: [Sprint 2–3 frontend](docs/sprint-2-3-frontend.md).

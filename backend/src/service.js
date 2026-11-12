@@ -161,8 +161,12 @@ export async function view(c, user) {
     : [];
   const historicalIds = orders.flatMap((o) => o.items.map((i) => i.id));
   const { rows: productRows } = await c.query(
-    `SELECT p.*, c.name AS category FROM products p
-     JOIN categories c ON c.id = p.category_id
+    `SELECT p.*, c.name AS category,
+       COALESCE(r.rating_count, 0)::int AS live_rating_count,
+       COALESCE(r.rating_sum, 0)::int AS live_rating_sum
+     FROM products p JOIN categories c ON c.id = p.category_id
+     LEFT JOIN (SELECT product_id, count(*) AS rating_count, sum(rating) AS rating_sum
+                FROM reviews GROUP BY product_id) r ON r.product_id = p.id
      WHERE NOT p.archived OR $1 OR p.code = ANY($2)
      ORDER BY p.id`,
     [isManager, historicalIds],
@@ -177,7 +181,20 @@ export async function view(c, user) {
     revision,
     user: publicUser(user),
     categories: categoryRows.map((r) => r.name),
-    products: productRows.map(productFromRow),
+    products: productRows.map((row) => {
+      const product = productFromRow(row);
+      const count = (product.ratingCount || 0) + row.live_rating_count;
+      const sum =
+        (product.rating || 0) * (product.ratingCount || 0) +
+        row.live_rating_sum;
+      return {
+        ...product,
+        publishedRating: {
+          count,
+          rating: count ? (sum / count).toFixed(1) : 'No ratings yet',
+        },
+      };
+    }),
     orders,
     reviews: reviewRows.map((r) =>
       isManager || (user && r.customer_id === user.id)

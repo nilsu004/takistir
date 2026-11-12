@@ -389,6 +389,9 @@ test('only delivered purchases can be reviewed and moderation controls publicati
     ).status,
     400,
   );
+  const before = (await guest('/state')).body.state.products.find(
+    (p) => p.id === 'TK-002',
+  ).publishedRating;
   assert.equal(
     (
       await customer('/reviews', 'POST', {
@@ -405,6 +408,20 @@ test('only delivered purchases can be reviewed and moderation controls publicati
   assert(
     !(await guest('/state')).body.state.reviews.some((r) => r.id === review.id),
   );
+  const pendingState = (await guest('/state')).body.state;
+  const pendingRating = pendingState.products.find(
+    (p) => p.id === 'TK-002',
+  ).publishedRating;
+  assert.equal(pendingRating.count, before.count + 1);
+  assert(!JSON.stringify(pendingState).includes('A pending comment'));
+  assert(!JSON.stringify(pendingState).includes('CU-001'));
+  for (const read of [manager, customer]) {
+    assert.deepEqual(
+      (await read('/state')).body.state.products.find((p) => p.id === 'TK-002')
+        .publishedRating,
+      pendingRating,
+    );
+  }
   assert.equal(
     (
       await manager(`/manager/reviews/${review.id}`, 'PATCH', {
@@ -416,6 +433,11 @@ test('only delivered purchases can be reviewed and moderation controls publicati
   assert(
     !(await guest('/state')).body.state.reviews.some((r) => r.id === review.id),
   );
+  assert.deepEqual(
+    (await guest('/state')).body.state.products.find((p) => p.id === 'TK-002')
+      .publishedRating,
+    pendingRating,
+  );
   assert.equal(
     (await manager('/manager/reviews/RV-DEMO', 'PATCH', { status: 'Approved' }))
       .status,
@@ -425,6 +447,11 @@ test('only delivered purchases can be reviewed and moderation controls publicati
     (await guest('/state')).body.state.reviews.some(
       (r) => r.id === 'RV-DEMO' && r.status === 'Approved',
     ),
+  );
+  assert.deepEqual(
+    (await guest('/state')).body.state.products.find((p) => p.id === 'TK-002')
+      .publishedRating,
+    pendingRating,
   );
   assert.equal(
     (await manager('/manager/reviews/RV-DEMO', 'PATCH', { status: 'Rejected' }))

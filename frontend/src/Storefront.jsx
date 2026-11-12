@@ -8,8 +8,8 @@ import {
   Quantity,
   Summary,
 } from './components.jsx';
-import { money } from './data.js';
-import { publishedRating } from './manager/model.js';
+import { money, navigate } from './data.js';
+import { catalogProducts, publishedRating } from './manager/model.js';
 import { useStore } from './Store.jsx';
 
 export function Home() {
@@ -41,28 +41,26 @@ export function Home() {
 
 export function Catalog({ params }) {
   const { products, categories } = useStore();
-  const [category, setCategory] = useState(
-    params.get('category') || 'All accessories',
-  );
-  const [availability, setAvailability] = useState('all');
-  const [sort, setSort] = useState('popular');
+  const category = params.get('category') || 'All accessories';
+  const availability =
+    params.get('availability') === 'in-stock' ? 'in-stock' : 'all';
+  const sort = ['low', 'high'].includes(params.get('sort'))
+    ? params.get('sort')
+    : 'popular';
   const query = params.get('q') || '';
-  const shown = products
-    .filter(
-      (p) =>
-        (category === 'All accessories' || p.category === category) &&
-        `${p.name} ${p.description}`
-          .toLowerCase()
-          .includes(query.toLowerCase()) &&
-        (availability === 'all' || p.stock > 0),
-    )
-    .sort((a, b) =>
-      sort === 'low'
-        ? a.price - b.price
-        : sort === 'high'
-          ? b.price - a.price
-          : b.popularity - a.popularity,
-    );
+  function setFilter(key, value) {
+    const next = new URLSearchParams(params);
+    if (value === 'all' || value === 'popular' || value === 'All accessories')
+      next.delete(key);
+    else next.set(key, value);
+    navigate(`/catalog${next.size ? `?${next}` : ''}`);
+  }
+  const shown = catalogProducts(products, {
+    category,
+    availability,
+    sort,
+    query,
+  });
   return (
     <main className="container page">
       <div className="page-heading">
@@ -80,19 +78,23 @@ export function Catalog({ params }) {
         <label>
           Category
           <select
+            aria-label="Category"
             value={category}
-            onChange={(event) => setCategory(event.target.value)}
+            onChange={(event) => setFilter('category', event.target.value)}
           >
-            {['All accessories', ...categories].map((name) => (
-              <option key={name}>{name}</option>
-            ))}
+            {[...new Set(['All accessories', ...categories, category])].map(
+              (name) => (
+                <option key={name}>{name}</option>
+              ),
+            )}
           </select>
         </label>
         <label>
           Availability
           <select
+            aria-label="Availability"
             value={availability}
-            onChange={(event) => setAvailability(event.target.value)}
+            onChange={(event) => setFilter('availability', event.target.value)}
           >
             <option value="all">All products</option>
             <option value="in-stock">In stock</option>
@@ -101,8 +103,9 @@ export function Catalog({ params }) {
         <label className="sort-filter">
           Sort by
           <select
+            aria-label="Sort by"
             value={sort}
-            onChange={(event) => setSort(event.target.value)}
+            onChange={(event) => setFilter('sort', event.target.value)}
           >
             <option value="popular">Popularity</option>
             <option value="low">Price: low to high</option>
@@ -117,10 +120,6 @@ export function Catalog({ params }) {
           title="No products found"
           href="#/catalog"
           action="Clear filters"
-          onAction={() => {
-            setCategory('All accessories');
-            setAvailability('all');
-          }}
         >
           Try another search or category.
         </EmptyState>
@@ -139,10 +138,10 @@ export function Product({ id }) {
     orders,
     reviews,
     submitReview,
-    setToast,
   } = useStore();
   const [qty, setQty] = useState(1);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewError, setReviewError] = useState('');
   const product = products.find((p) => p.id === id);
   if (!product)
     return (
@@ -166,7 +165,7 @@ export function Product({ id }) {
     <main className="container product-page">
       <p className="breadcrumb">
         <a href="#/">Home</a> /{' '}
-        <a href={`#/catalog?category=${product.category}`}>
+        <a href={`#/catalog?category=${encodeURIComponent(product.category)}`}>
           {product.category}
         </a>{' '}
         / {product.name}
@@ -186,7 +185,7 @@ export function Product({ id }) {
                 ?.scrollIntoView({ behavior: 'smooth' });
             }}
           >
-            ★★★★★ &nbsp; {rating} / 5 · {count} reviews
+            {count ? `${rating} / 5 · ${count} ratings` : 'No ratings yet'}
           </a>
           <p className="detail-price">{money(product.price)}</p>
           {product.price === null && (
@@ -201,10 +200,14 @@ export function Product({ id }) {
               : 'Out of stock'}
           </p>
           <div className="product-actions">
-            <Quantity value={qty} onChange={setQty} max={product.stock} />
+            <Quantity
+              value={Math.min(qty, Math.max(1, product.stock))}
+              onChange={setQty}
+              max={product.stock}
+            />
             <Button
               disabled={!product.stock || product.price === null}
-              onClick={() => addToCart(id, qty)}
+              onClick={() => addToCart(id, Math.min(qty, product.stock))}
             >
               Add to cart
             </Button>
@@ -233,20 +236,30 @@ export function Product({ id }) {
         <div className="section-heading">
           <h2>Customer reviews</h2>
           {eligible && (
-            <Button secondary onClick={() => setReviewOpen(!reviewOpen)}>
+            <Button
+              secondary
+              aria-expanded={reviewOpen && eligible}
+              aria-controls="review-form"
+              onClick={() => {
+                setReviewError('');
+                setReviewOpen(!reviewOpen);
+              }}
+            >
               Write a review
             </Button>
           )}
         </div>
         <Notice>
-          Only purchased and delivered products can be reviewed. Both comments
-          and star ratings appear after Product Manager approval.
+          Only purchased and delivered products can be reviewed. Star ratings
+          appear immediately; comments appear after Product Manager approval.
         </Notice>
-        {reviewOpen && (
+        {reviewOpen && eligible && (
           <form
+            id="review-form"
             className="panel review-form"
             onSubmit={async (event) => {
               event.preventDefault();
+              setReviewError('');
               const data = new FormData(event.currentTarget);
               const error = await submitReview(
                 id,
@@ -254,7 +267,7 @@ export function Product({ id }) {
                 String(data.get('comment')),
               );
               if (error) {
-                setToast(error);
+                setReviewError(error);
                 return;
               }
               setReviewOpen(false);
@@ -262,7 +275,7 @@ export function Product({ id }) {
           >
             <label className="field">
               Rating
-              <select name="rating" required>
+              <select name="rating" aria-label="Rating" required>
                 <option value="5">5 stars</option>
                 <option value="4">4 stars</option>
                 <option value="3">3 stars</option>
@@ -274,6 +287,7 @@ export function Product({ id }) {
               Comment
               <textarea name="comment" required maxLength={500} />
             </label>
+            {reviewError && <Notice error>{reviewError}</Notice>}
             <Button type="submit">Submit review</Button>
           </form>
         )}
@@ -291,9 +305,18 @@ export function Product({ id }) {
                 .filter((review) => review.status === 'Approved')
                 .map((review) => (
                   <tr key={review.id}>
-                    <td>{'★'.repeat(review.rating)}</td>
-                    <td>{review.comment}</td>
-                    <td>{review.author?.slice(0, 1)}*** · Verified purchase</td>
+                    <td
+                      data-label="Rating"
+                      aria-label={`${review.rating} out of 5 stars`}
+                    >
+                      {'★'.repeat(review.rating)}
+                    </td>
+                    <td data-label="Review" className="review-comment">
+                      {review.comment}
+                    </td>
+                    <td data-label="Customer">
+                      {review.author?.slice(0, 1)}*** · Verified purchase
+                    </td>
                   </tr>
                 ))}
               {!ownReviews.some((review) => review.status === 'Approved') && (
@@ -310,8 +333,7 @@ export function Product({ id }) {
               review.status === 'Pending' && review.customerId === user.id,
           ) && (
             <p className="muted">
-              Your rating and comment are awaiting approval and are not
-              published yet.
+              Your rating is published. Your comment is awaiting approval.
             </p>
           )}
       </section>
