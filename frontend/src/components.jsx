@@ -64,7 +64,7 @@ export function Header() {
         {['New arrivals', ...categories, 'All accessories'].map((name) => (
           <a
             key={name}
-            href={`#/catalog${['New arrivals', 'All accessories'].includes(name) ? '' : `?category=${name}`}`}
+            href={`#/catalog${['New arrivals', 'All accessories'].includes(name) ? '' : `?category=${encodeURIComponent(name)}`}`}
           >
             {name}
           </a>
@@ -118,7 +118,11 @@ export function ProductCard({ product }) {
         <ProductArt product={product} />
       </a>
       <p className="eyebrow">
-        {product.stock ? 'New arrivals' : 'Out of stock'}
+        {!product.stock
+          ? 'Out of stock'
+          : product.price === null
+            ? 'Price pending'
+            : product.collection || 'In stock'}
       </p>
       <h3>
         <a href={`#/product/${product.id}`}>{product.name}</a>

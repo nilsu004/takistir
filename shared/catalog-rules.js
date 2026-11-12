@@ -75,12 +75,48 @@ export function canTransition(current, next) {
 }
 
 export function publishedRating(product, reviews) {
-  const approved = reviews.filter(
-    (r) => r.productId === product.id && r.status === 'Approved',
-  );
-  const count = (product.ratingCount || 0) + approved.length;
+  if (product.publishedRating) return product.publishedRating;
+  const rated = reviews.filter((r) => r.productId === product.id);
+  const count = (product.ratingCount || 0) + rated.length;
   const sum =
     (product.rating || 0) * (product.ratingCount || 0) +
-    approved.reduce((total, r) => total + r.rating, 0);
+    rated.reduce((total, r) => total + r.rating, 0);
   return { count, rating: count ? (sum / count).toFixed(1) : 'No ratings yet' };
+}
+
+// Unpriced products remain discoverable, after priced products in either price order.
+export function catalogProducts(
+  products,
+  {
+    category = 'All accessories',
+    query = '',
+    availability = 'all',
+    sort = 'popular',
+  } = {},
+) {
+  const search = query.trim().toLowerCase();
+  return products
+    .filter(
+      (p) =>
+        !p.archived &&
+        (category === 'All accessories' || p.category === category) &&
+        `${p.name} ${p.description}`.toLowerCase().includes(search) &&
+        (availability !== 'in-stock' || p.stock > 0),
+    )
+    .sort((a, b) => {
+      if (sort === 'low' || sort === 'high') {
+        if (a.price === null || b.price === null)
+          return (
+            Number(a.price === null) - Number(b.price === null) ||
+            a.id.localeCompare(b.id)
+          );
+        return (
+          (sort === 'low' ? a.price - b.price : b.price - a.price) ||
+          a.id.localeCompare(b.id)
+        );
+      }
+      return (
+        (b.popularity || 0) - (a.popularity || 0) || a.id.localeCompare(b.id)
+      );
+    });
 }

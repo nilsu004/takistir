@@ -220,7 +220,7 @@ export function StoreProvider({ children }) {
         '/reviews',
         'POST',
         { productId, rating, comment },
-        'Your rating and comment are awaiting approval.',
+        'Your rating is published. Your comment is awaiting approval.',
       )
     ).error;
   }

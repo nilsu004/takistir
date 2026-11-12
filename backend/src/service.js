@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { returnEligible } from '../../shared/order-rules.js';
-import { canTransition, validateProduct } from '../../shared/catalog-rules.js';
+import {
+  canTransition,
+  publishedRating,
+  validateProduct,
+} from '../../shared/catalog-rules.js';
 
 export function fail(status, message) {
   const error = new Error(message);
@@ -37,9 +41,12 @@ export function view(state, user) {
     revision: state.revision,
     user: publicUser(user),
     categories: state.categories,
-    products: state.products.filter(
-      (p) => !p.archived || isManager || historicalIds.has(p.id),
-    ),
+    products: state.products
+      .filter((p) => !p.archived || isManager || historicalIds.has(p.id))
+      .map((p) => ({
+        ...p,
+        publishedRating: publishedRating(p, state.reviews),
+      })),
     orders: orders.map(
       ({ checkoutKey: _, inventoryReserved: __, ...order }) => order,
     ),
