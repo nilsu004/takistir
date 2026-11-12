@@ -21,4 +21,6 @@ Use **My account → Local test accounts** to select a role. The manager is dire
 
 The cart supports API-backed additions, quantity changes, removal and clearing, server-calculated totals, loading/retry states and unavailable items. See [SCRUM-50 verification and limits](../docs/SCRUM-50-cart.md). Old preview-only localStorage carts are not imported into the server cart.
 
+Login and registration include field validation, password confirmation/visibility, guest-cart merge feedback and safe return navigation. See [SCRUM-53 verification and backend boundaries](../docs/SCRUM-53-auth.md), including the remaining tax-ID registration API requirement.
+
 See [integration scenarios and limits](../PRODUCT_MANAGER_DEMO.md), [local API details](../backend/README.md) and the [main README](../README.md). Build with `npm run build` and run the complete checks with `npm run check` from the repository root.

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { api } from './api.js';
 import { createCartClient } from './cart/cart-client.js';
+import { submitCredentials } from './auth/model.js';
 import { StoreContext } from './store-context.js';
 
 export { useStore } from './store-context.js';
@@ -37,6 +38,7 @@ export function StoreProvider({ children }) {
   );
   const [address, setAddress] = useState(null);
   const [toast, setToast] = useState('');
+  const [authNotice, setAuthNotice] = useState(null);
   const [chatOpen, setChatOpen] = useState(false);
   const allProducts = snapshot?.products || [];
   const products = allProducts.filter((p) => !p.archived);
@@ -44,6 +46,9 @@ export function StoreProvider({ children }) {
 
   function apply(state) {
     cartClient.setOwner(state.user);
+    setAuthNotice((current) =>
+      current?.userId === state.user?.id ? current : null,
+    );
     setSnapshot((current) =>
       current &&
       current.user?.id === state.user?.id &&
@@ -225,17 +230,27 @@ export function StoreProvider({ children }) {
       )
     ).error;
   }
-  async function login(email, password, registerName) {
-    return mutate(
-      registerName !== undefined ? '/auth/register' : '/auth/login',
-      'POST',
-      {
-        email,
-        password,
-        ...(registerName !== undefined ? { name: registerName } : {}),
-      },
-      'Signed in.',
+  async function login(email, password, registerName, confirmation, home) {
+    const result = await submitCredentials(
+      { email, password, name: registerName, confirmation, home },
+      mutate,
     );
+    if (result.error) return result;
+    const cartError =
+      result.state.user.role === 'customer'
+        ? cartClient.getSnapshot().syncError
+        : '';
+    const message = [
+      result.notice,
+      result.profileError,
+      cartError
+        ? 'You are signed in, but your cart could not be loaded. Open your cart and retry.'
+        : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+    setAuthNotice(message ? { userId: result.state.user.id, message } : null);
+    return { ...result, cartError };
   }
   async function logout() {
     return (await mutate('/auth/logout', 'POST', {}, 'Signed out.')).error;
@@ -380,6 +395,18 @@ export function StoreProvider({ children }) {
           {connectionError && (
             <div className="notice" role="alert">
               {connectionError} Displayed data may be stale.
+            </div>
+          )}
+          {authNotice && (
+            <div className="notice auth-notice" role="status">
+              <p>{authNotice.message}</p>
+              <button
+                className="text-button"
+                aria-label="Dismiss account notification"
+                onClick={() => setAuthNotice(null)}
+              >
+                Dismiss
+              </button>
             </div>
           )}
           {children}
