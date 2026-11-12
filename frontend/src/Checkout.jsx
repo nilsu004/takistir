@@ -4,9 +4,37 @@ import { money, navigate } from './data.js';
 import { useStore } from './Store.jsx';
 
 export function Checkout({ step }) {
-  const { user, cartItems, address, setAddress, total, placeOrder } =
-    useStore();
+  const {
+    user,
+    cartItems,
+    address,
+    setAddress,
+    total,
+    placeOrder,
+    cartEnabled,
+    cartReady,
+    cartSyncError,
+  } = useStore();
   const [paymentFailed, setPaymentFailed] = useState(false);
+  if (cartEnabled && !cartReady && !cartSyncError)
+    return (
+      <main className="container page">
+        <p role="status">Loading your cart…</p>
+      </main>
+    );
+  if (cartSyncError || cartItems.some((item) => !item.available))
+    return (
+      <main className="container page">
+        <EmptyState
+          title="Please review your cart"
+          href="#/cart"
+          action="Back to cart"
+        >
+          {cartSyncError ||
+            'Some items are no longer available in the requested quantity.'}
+        </EmptyState>
+      </main>
+    );
   if (!cartItems.length)
     return (
       <main className="container page">

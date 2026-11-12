@@ -1,11 +1,9 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { api } from './api.js';
+import { createCartClient } from './cart/cart-client.js';
+import { StoreContext } from './store-context.js';
 
-const StoreContext = createContext(null);
-const defaultCart = [
-  { id: 'TK-001', qty: 1 },
-  { id: 'TK-002', qty: 1 },
-];
+export { useStore } from './store-context.js';
 function readSaved(key, fallback, validate) {
   try {
     const value = JSON.parse(localStorage.getItem(`takistir-preview:${key}`));
@@ -22,20 +20,14 @@ export function StoreProvider({ children }) {
   const epoch = useRef(0);
   const sequence = useRef(0);
   const checkoutKey = useRef(null);
-  const [cart, setCart] = useState(() =>
-    readSaved(
-      'cart',
-      defaultCart,
-      (v) =>
-        Array.isArray(v) &&
-        v.every(
-          (i) =>
-            typeof i.id === 'string' &&
-            Number.isSafeInteger(i.qty) &&
-            i.qty > 0,
-        ),
-    ),
+  const [cartClient] = useState(() => createCartClient(api));
+  const cartState = useSyncExternalStore(
+    cartClient.subscribe,
+    cartClient.getSnapshot,
   );
+  const cartItems = cartState.items;
+  const cart = cartItems.map(({ id, qty }) => ({ id, qty }));
+  const total = cartState.total;
   const [wishlist, setWishlist] = useState(() =>
     readSaved(
       'wishlist',
@@ -51,6 +43,7 @@ export function StoreProvider({ children }) {
   const user = snapshot?.user || null;
 
   function apply(state) {
+    cartClient.setOwner(state.user);
     setSnapshot((current) =>
       current &&
       current.user?.id === state.user?.id &&
@@ -70,6 +63,9 @@ export function StoreProvider({ children }) {
       setConnectionError('');
     } catch (error) {
       if (version === epoch.current) setConnectionError(error.message);
+    } finally {
+      if (version === epoch.current && request === sequence.current)
+        cartClient.refresh();
     }
   }
   useEffect(() => {
@@ -79,18 +75,13 @@ export function StoreProvider({ children }) {
     window.addEventListener('focus', onFocus);
     return () => {
       epoch.current += 1;
+      cartClient.dispose();
       clearInterval(timer);
       window.removeEventListener('focus', onFocus);
     };
   }, []);
   useEffect(() => {
     if (!snapshot) return;
-    const ids = new Set(
-      snapshot.products
-        .filter((p) => !p.archived && p.price !== null)
-        .map((p) => p.id),
-    );
-    setCart((items) => items.filter((i) => ids.has(i.id)));
     const visible = new Set(
       snapshot.products.filter((p) => !p.archived).map((p) => p.id),
     );
@@ -102,7 +93,6 @@ export function StoreProvider({ children }) {
   }, [user?.id]);
   useEffect(() => {
     try {
-      localStorage.setItem('takistir-preview:cart', JSON.stringify(cart));
       localStorage.setItem(
         'takistir-preview:wishlist',
         JSON.stringify(wishlist),
@@ -110,7 +100,7 @@ export function StoreProvider({ children }) {
     } catch {
       /* Storage is optional. */
     }
-  }, [cart, wishlist]);
+  }, [wishlist]);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(''), 4000);
@@ -118,7 +108,7 @@ export function StoreProvider({ children }) {
   }, [toast]);
 
   async function mutate(path, method, body, message) {
-    if (pending.current)
+    if (pending.current || cartClient.getSnapshot().pending)
       return { error: 'Please wait for the current request to finish.' };
     pending.current = true;
     epoch.current += 1;
@@ -126,6 +116,7 @@ export function StoreProvider({ children }) {
     try {
       const response = await api(path, { method, body });
       apply(response.state);
+      await cartClient.refresh();
       setConnectionError('');
       if (message) setToast(message);
       return { data: response.data, state: response.state, error: '' };
@@ -252,43 +243,29 @@ export function StoreProvider({ children }) {
   async function updateProfile(fields) {
     return (await mutate('/profile', 'PATCH', fields, 'Profile saved.')).error;
   }
-  function addToCart(id, qty = 1) {
-    const product = products.find((p) => p.id === id);
-    if (
-      !product ||
-      product.price === null ||
-      !Number.isSafeInteger(qty) ||
-      qty < 1
-    ) {
-      setToast('This product is not available to purchase.');
-      return;
+  async function cartAction(action, message) {
+    if (pending.current) {
+      setToast('Please wait for the current request to finish.');
+      return false;
     }
-    setCart((items) => {
-      const current = items.find((i) => i.id === id)?.qty || 0;
-      if (current + qty > product.stock) return items;
-      return items.some((i) => i.id === id)
-        ? items.map((i) => (i.id === id ? { ...i, qty: i.qty + qty } : i))
-        : [...items, { id, qty }];
-    });
-    const existing = cart.find((i) => i.id === id)?.qty || 0;
-    setToast(
-      existing + qty > product.stock
-        ? 'The requested quantity is not available.'
-        : `${product.name} added to your cart.`,
+    const result = await action();
+    setToast(result.error || message);
+    return !result.error;
+  }
+  function addToCart(id, qty = 1) {
+    return cartAction(
+      () => cartClient.add(id, qty),
+      'Product added to your cart.',
     );
   }
   function updateQuantity(id, qty) {
-    const product = products.find((p) => p.id === id);
-    if (!Number.isSafeInteger(qty) || qty < 0) return;
-    if (qty === 0) {
-      setCart((items) => items.filter((i) => i.id !== id));
-      return;
-    }
-    if (!product || qty > product.stock) {
-      setToast('No more stock is available.');
-      return;
-    }
-    setCart((items) => items.map((i) => (i.id === id ? { ...i, qty } : i)));
+    return cartAction(
+      () => cartClient.setQuantity(id, qty),
+      qty === 0 ? 'Product removed from your cart.' : 'Cart updated.',
+    );
+  }
+  function clearCart() {
+    return cartAction(() => cartClient.clear(), 'Cart cleared.');
   }
   function toggleWishlist(id) {
     setWishlist((items) =>
@@ -296,6 +273,17 @@ export function StoreProvider({ children }) {
     );
   }
   async function placeOrder() {
+    if (
+      !cartState.ready ||
+      cartState.syncError ||
+      connectionError ||
+      cartState.loading ||
+      cartState.pending ||
+      cartItems.some((item) => !item.available)
+    ) {
+      setToast('Please review your cart before placing an order.');
+      return null;
+    }
     if (!cart.length || !address || user?.role !== 'customer') {
       setToast('Sign in with a customer account and enter a delivery address.');
       return null;
@@ -310,8 +298,13 @@ export function StoreProvider({ children }) {
       'Order placed.',
     );
     if (result.error) return null;
-    setCart([]);
-    checkoutKey.current = null;
+    // SCRUM-55 will make order creation and server-cart clearing atomic.
+    const cleared = await cartClient.clear();
+    if (cleared.error)
+      setToast(
+        `Order placed, but the cart could not be cleared: ${cleared.error}`,
+      );
+    if (!cleared.error) checkoutKey.current = null;
     return result.state.orders.find((o) => o.id === result.data);
   }
   async function cancelOrder(id) {
@@ -334,11 +327,6 @@ export function StoreProvider({ children }) {
       )
     ).error;
   }
-  const cartItems = cart.flatMap((item) => {
-    const p = products.find((p) => p.id === item.id);
-    return p && p.price !== null ? [{ ...p, qty: item.qty }] : [];
-  });
-  const total = cartItems.reduce((sum, i) => sum + i.price * i.qty, 0);
   return (
     <StoreContext.Provider
       value={{
@@ -362,6 +350,14 @@ export function StoreProvider({ children }) {
         cart,
         cartItems,
         total,
+        cartReady: cartState.ready,
+        cartEnabled: cartState.enabled,
+        cartLoading: cartState.loading,
+        cartBusy: cartState.pending,
+        cartError: cartState.error || cartState.syncError || connectionError,
+        cartSyncError: cartState.syncError || connectionError,
+        refreshCart: () => cartClient.refresh({ clearError: true }),
+        clearCart,
         wishlist,
         address,
         setAddress,
@@ -375,7 +371,7 @@ export function StoreProvider({ children }) {
         setToast,
         chatOpen,
         setChatOpen,
-        busy,
+        busy: busy || cartState.pending,
         connectionError,
       }}
     >
@@ -401,7 +397,4 @@ export function StoreProvider({ children }) {
       )}
     </StoreContext.Provider>
   );
-}
-export function useStore() {
-  return useContext(StoreContext);
 }
