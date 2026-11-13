@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { returnEligible } from '../../shared/order-rules.js';
-import { canTransition, validateProduct } from '../../shared/catalog-rules.js';
+import {
+  canTransition,
+  productIdPattern,
+  validateProduct,
+} from '../../shared/catalog-rules.js';
 
 // Business rules and messages are unchanged from the SQLite version; only data
 // access moved to PostgreSQL. Every mutating function receives `c`, a client
@@ -70,6 +74,57 @@ function productFromRow(r) {
     ...(r.detail_image ? { detailImage: r.detail_image } : {}),
     archived: r.archived,
   };
+}
+
+export async function listCategories(c) {
+  const { rows } = await c.query(
+    'SELECT name FROM categories WHERE NOT archived ORDER BY id',
+  );
+  return rows.map((row) => row.name);
+}
+
+const catalogSort = new Map([
+  ['price-asc', 'p.price ASC NULLS LAST, p.id'],
+  ['price-desc', 'p.price DESC NULLS LAST, p.id'],
+  ['popularity', 'p.popularity DESC, p.id'],
+]);
+
+export async function listProducts(c, { category, q, sort }) {
+  const categoryName =
+    category === undefined ? null : text(category, 'Category');
+  const search = q === undefined ? null : text(q, 'Search', 200);
+  const orderBy = sort === undefined ? 'p.id' : catalogSort.get(sort);
+  if (!orderBy) fail(400, 'Sort must be price-asc, price-desc, or popularity.');
+  const pattern = search && `%${search.replace(/[!%_]/g, '!$&')}%`;
+  const { rows } = await c.query(
+    `SELECT p.*, c.name AS category
+     FROM products p JOIN categories c ON c.id = p.category_id
+     WHERE NOT p.archived AND NOT c.archived
+       AND ($1::text IS NULL OR c.name = $1)
+       AND ($2::text IS NULL OR p.name ILIKE $2 ESCAPE '!' OR p.description ILIKE $2 ESCAPE '!')
+     ORDER BY ${orderBy}`,
+    [categoryName, pattern],
+  );
+  return rows.map(publicCatalogProduct);
+}
+
+function publicCatalogProduct(row) {
+  return {
+    ...productFromRow(row),
+    available: row.stock_quantity > 0 && row.price !== null,
+  };
+}
+
+export async function getProduct(c, id) {
+  if (!productIdPattern.test(id)) fail(400, 'Invalid product ID.');
+  const { rows } = await c.query(
+    `SELECT p.*, c.name AS category
+     FROM products p JOIN categories c ON c.id = p.category_id
+     WHERE p.code = $1 AND NOT p.archived AND NOT c.archived`,
+    [id],
+  );
+  if (!rows.length) fail(404, 'Product not found.');
+  return publicCatalogProduct(rows[0]);
 }
 
 /** Orders with their items and return requests, in the API's shape. */
@@ -149,9 +204,7 @@ export async function view(c, user) {
       )
     ).rows[0].v,
   );
-  const { rows: categoryRows } = await c.query(
-    'SELECT name FROM categories WHERE NOT archived ORDER BY id',
-  );
+  const categories = await listCategories(c);
   const orders = user
     ? await loadOrders(
         c,
@@ -176,7 +229,7 @@ export async function view(c, user) {
   return {
     revision,
     user: publicUser(user),
-    categories: categoryRows.map((r) => r.name),
+    categories,
     products: productRows.map(productFromRow),
     orders,
     reviews: reviewRows.map((r) =>

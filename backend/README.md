@@ -61,6 +61,12 @@ Mutations return `{ data, state }`; the state has a revision and is filtered by 
 
 Every change runs in one PostgreSQL transaction (`src/db.js`, `tx`); if any step fails, nothing is saved. Checkout locks the purchased product rows with `SELECT … FOR UPDATE` in id order, so competing buyers cannot oversell and two carts with the same items in a different order cannot deadlock. A `CHECK` constraint also keeps stock non-negative. A checkout key prevents retrying the same purchase from decrementing stock twice. Prices come from the server; client price fields cannot change order totals. Product Manager cannot set price or discount fields. New products await Sales Manager pricing and cannot be purchased yet. Removal archives products, preserving purchase-time order/invoice names, images and paid prices.
 
+## Public catalog
+
+- `GET /api/categories` returns `{ data: [categoryName, ...] }`.
+- `GET /api/products` returns `{ data: [product, ...] }`. Optional parameters are `category` (exact category name), `q` (literal substring of name or description), and `sort` (`price-asc`, `price-desc`, or `popularity`). Sold-out products remain searchable with `available: false`.
+- `GET /api/products/:id` returns a product directly, including its current stock and availability. It returns 400 for malformed codes and 404 for missing or archived products.
+
 ## Cart (SCRUM-49)
 
 Guests and signed-in customers each have one cart; staff accounts have none (403). Every cart endpoint returns:

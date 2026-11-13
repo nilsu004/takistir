@@ -1,3 +1,4 @@
+export const productIdPattern = /^[A-Za-z0-9-]{1,40}$/;
 export const orderStatuses = ['Processing', 'In transit', 'Delivered'];
 export const initialCategories = [
   'Necklaces',
@@ -29,7 +30,7 @@ export function validateProduct(product, products, categories, editingId) {
     )
   )
     return 'Complete all required product fields.';
-  if (!/^[A-Za-z0-9-]{1,40}$/.test(product.id))
+  if (!productIdPattern.test(product.id))
     return 'Use up to 40 letters, numbers or hyphens for the product ID.';
   if (
     products.some(

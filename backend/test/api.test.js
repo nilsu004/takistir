@@ -367,6 +367,47 @@ test('delivery transitions appear in customer history and survive product remova
   assert(invoice.address);
 });
 
+test('guests can browse, search and sort the catalog including sold-out products', async (t) => {
+  const { guest, manager } = await fixture(t);
+  const categories = await guest('/categories');
+  assert.equal(categories.status, 200);
+  const detail = await guest('/products/TK-001');
+  assert.equal(detail.status, 200);
+  assert(categories.body.data.includes(detail.body.category));
+  assert.equal(typeof detail.body.stock, 'number');
+  assert.equal((await guest('/products/missing')).status, 404);
+  const category = encodeURIComponent(detail.body.category);
+  const filtered = (await guest(`/products?category=${category}`)).body.data;
+  assert(filtered.some((p) => p.id === 'TK-001'));
+  assert(filtered.every((p) => p.category === detail.body.category));
+
+  await manager('/manager/products/TK-001/stock', 'PATCH', { stock: 0 });
+  const search = encodeURIComponent(detail.body.name.toLowerCase());
+  const matches = (await guest(`/products?q=${search}`)).body.data;
+  assert(
+    matches.some((p) => p.id === 'TK-001' && p.stock === 0 && !p.available),
+  );
+  for (const term of ['missing-catalog-term', '%', "' OR TRUE --"]) {
+    assert.deepEqual(
+      (await guest(`/products?q=${encodeURIComponent(term)}`)).body.data,
+      [],
+    );
+  }
+  for (const sort of ['price-asc', 'price-desc', 'popularity']) {
+    const result = await guest(`/products?sort=${sort}`);
+    assert.equal(result.status, 200);
+    const values = result.body.data.map((p) =>
+      sort === 'popularity' ? p.popularity : p.price,
+    );
+    assert.deepEqual(
+      values,
+      values.toSorted((a, b) => (sort === 'price-asc' ? a - b : b - a)),
+    );
+  }
+  assert.equal((await guest('/products?sort=invalid')).status, 400);
+  assert.equal((await guest('/products?q=a&q=b')).status, 400);
+});
+
 test('only delivered purchases can be reviewed and moderation controls publication', async (t) => {
   const { manager, customer, guest } = await fixture(t);
   assert.equal(
