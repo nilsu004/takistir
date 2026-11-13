@@ -450,6 +450,8 @@ export async function placeOrder(c, user, body) {
   });
   const address = body.address || {};
   const line = `${text(address.name, 'Recipient')} · ${text(address.street, 'Street', 300)}, ${text(address.city, 'City')} ${text(address.postcode, 'Postcode', 20)}`;
+  if ([...line].length > 600)
+    fail(400, 'Delivery address must contain at most 600 characters.');
   for (const item of items)
     await c.query(
       'UPDATE products SET stock_quantity = stock_quantity - $2 WHERE id = $1',

@@ -176,6 +176,40 @@ test('an invalid delivery address rolls back the stock decrease', async (t) => {
   assert.equal(await stock('TK-002'), 8);
 });
 
+test('checkout validates the combined delivery address before saving the order', async (t) => {
+  const { db, newCustomer, stock } = await api(t);
+  const buyer = await newCustomer(1);
+  const order = {
+    key: 'long-address',
+    items: [{ id: 'TK-002', qty: 2 }],
+    address: {
+      name: 'N'.repeat(160),
+      street: 'S'.repeat(300),
+      city: 'C'.repeat(115),
+      postcode: '1'.repeat(20),
+    },
+  };
+
+  const rejected = await buyer('/orders', 'POST', order);
+  assert.equal(rejected.status, 400);
+  assert.match(rejected.body.error, /Delivery address.*600/);
+  const { rows } = await db.query(
+    'SELECT id FROM orders WHERE checkout_key = $1',
+    [order.key],
+  );
+  assert.deepEqual(rows, []);
+  assert.equal(await stock('TK-002'), 8);
+
+  // Remove one character to reach the 600-character storage limit.
+  order.address.city = order.address.city.slice(1);
+  const accepted = await buyer('/orders', 'POST', order);
+  assert.equal(accepted.status, 200);
+  const invoice = await buyer(`/orders/${accepted.body.data}/invoice`);
+  assert.equal(invoice.status, 200);
+  assert.equal(invoice.body.address.length, 600);
+  assert.equal(await stock('TK-002'), 6);
+});
+
 test('many concurrent buyers: exactly the available stock is sold', async (t) => {
   const { db, newCustomer, stock } = await api(t);
   await db.query(
