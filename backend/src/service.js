@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { returnEligible } from '../../shared/order-rules.js';
-import { canTransition, validateProduct } from '../../shared/catalog-rules.js';
+import {
+  canTransition,
+  productIdPattern,
+  validateProduct,
+} from '../../shared/catalog-rules.js';
 
 // Business rules and messages are unchanged from the SQLite version; only data
 // access moved to PostgreSQL. Every mutating function receives `c`, a client
@@ -70,6 +74,18 @@ function productFromRow(r) {
     ...(r.detail_image ? { detailImage: r.detail_image } : {}),
     archived: r.archived,
   };
+}
+
+export async function readProduct(db, id) {
+  if (!productIdPattern.test(id)) fail(400, 'Invalid product ID.');
+  const { rows } = await db.query(
+    `SELECT p.*, c.name AS category FROM products p
+     JOIN categories c ON c.id = p.category_id
+     WHERE p.code = $1 AND NOT p.archived`,
+    [id],
+  );
+  if (!rows.length) fail(404, 'Product not found.');
+  return productFromRow(rows[0]);
 }
 
 /** Orders with their items and return requests, in the API's shape. */
