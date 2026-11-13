@@ -239,8 +239,8 @@ export function Product({ id }) {
           )}
         </div>
         <Notice>
-          Only purchased and delivered products can be reviewed. Both comments
-          and star ratings appear after Product Manager approval.
+          Only purchased and delivered products can be reviewed. Star ratings
+          appear immediately. Comments appear after Product Manager approval.
         </Notice>
         {reviewOpen && (
           <form
@@ -310,8 +310,7 @@ export function Product({ id }) {
               review.status === 'Pending' && review.customerId === user.id,
           ) && (
             <p className="muted">
-              Your rating and comment are awaiting approval and are not
-              published yet.
+              Your rating is published. Your comment is awaiting approval.
             </p>
           )}
       </section>

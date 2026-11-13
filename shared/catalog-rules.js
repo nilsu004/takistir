@@ -76,6 +76,16 @@ export function canTransition(current, next) {
 }
 
 export function publishedRating(product, reviews) {
+  if (product.publishedRatingCount !== undefined) {
+    const seedCount = product.ratingCount || 0;
+    const count = seedCount + product.publishedRatingCount;
+    const sum =
+      (product.rating || 0) * seedCount + product.publishedRatingTotal;
+    return {
+      count,
+      rating: count ? (sum / count).toFixed(1) : 'No ratings yet',
+    };
+  }
   const approved = reviews.filter(
     (r) => r.productId === product.id && r.status === 'Approved',
   );

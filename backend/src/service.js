@@ -62,6 +62,8 @@ function productFromRow(r) {
     stock: r.stock_quantity,
     rating: r.seed_rating,
     ratingCount: r.seed_rating_count,
+    publishedRatingCount: r.published_rating_count,
+    publishedRatingTotal: r.published_rating_total,
     popularity: r.popularity,
     collection: r.collection,
     model: r.model,
@@ -75,6 +77,9 @@ function productFromRow(r) {
     archived: r.archived,
   };
 }
+
+const ratingColumns = `(SELECT COUNT(*)::int FROM reviews r WHERE r.product_id = p.id) AS published_rating_count,
+  (SELECT COALESCE(SUM(r.rating), 0)::int FROM reviews r WHERE r.product_id = p.id) AS published_rating_total`;
 
 export async function listCategories(c) {
   const { rows } = await c.query(
@@ -97,7 +102,7 @@ export async function listProducts(c, { category, q, sort }) {
   if (!orderBy) fail(400, 'Sort must be price-asc, price-desc, or popularity.');
   const pattern = search && `%${search.replace(/[!%_]/g, '!$&')}%`;
   const { rows } = await c.query(
-    `SELECT p.*, c.name AS category
+    `SELECT p.*, c.name AS category, ${ratingColumns}
      FROM products p JOIN categories c ON c.id = p.category_id
      WHERE NOT p.archived AND NOT c.archived
        AND ($1::text IS NULL OR c.name = $1)
@@ -118,7 +123,7 @@ function publicCatalogProduct(row) {
 export async function getProduct(c, id) {
   if (!productIdPattern.test(id)) fail(400, 'Invalid product ID.');
   const { rows } = await c.query(
-    `SELECT p.*, c.name AS category
+    `SELECT p.*, c.name AS category, ${ratingColumns}
      FROM products p JOIN categories c ON c.id = p.category_id
      WHERE p.code = $1 AND NOT p.archived AND NOT c.archived`,
     [id],
@@ -214,7 +219,7 @@ export async function view(c, user) {
     : [];
   const historicalIds = orders.flatMap((o) => o.items.map((i) => i.id));
   const { rows: productRows } = await c.query(
-    `SELECT p.*, c.name AS category FROM products p
+    `SELECT p.*, c.name AS category, ${ratingColumns} FROM products p
      JOIN categories c ON c.id = p.category_id
      WHERE NOT p.archived OR $1 OR p.code = ANY($2)
      ORDER BY p.id`,

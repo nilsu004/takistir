@@ -408,8 +408,9 @@ test('guests can browse, search and sort the catalog including sold-out products
   assert.equal((await guest('/products?q=a&q=b')).status, 400);
 });
 
-test('only delivered purchases can be reviewed and moderation controls publication', async (t) => {
+test('only delivered purchases can be reviewed and moderation controls comment publication', async (t) => {
   const { manager, customer, guest } = await fixture(t);
+  const before = (await guest('/products/TK-002')).body;
   assert.equal(
     (
       await customer('/reviews', 'POST', {
@@ -443,8 +444,17 @@ test('only delivered purchases can be reviewed and moderation controls publicati
   const review = (await manager('/state')).body.state.reviews.find(
     (r) => r.comment === 'A pending comment',
   );
+  const published = (await guest('/state')).body.state.products.find(
+    (p) => p.id === 'TK-002',
+  );
+  assert.equal(published.publishedRatingCount, before.publishedRatingCount + 1);
+  assert.equal(published.publishedRatingTotal, before.publishedRatingTotal + 1);
   assert(
     !(await guest('/state')).body.state.reviews.some((r) => r.id === review.id),
+  );
+  assert.equal(
+    (await guest('/products/TK-002')).body.publishedRatingCount,
+    published.publishedRatingCount,
   );
   assert.equal(
     (

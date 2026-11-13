@@ -102,4 +102,4 @@ Guests and signed-in customers each have one cart; staff accounts have none (403
 
 This backend does not yet add Sales Manager or Support Agent backend workflows, real payments, delivery-provider calls, invoice PDF generation/email, password recovery, email verification, production account provisioning, or checkout from the server cart (SCRUM-55). The frontend still keeps its own cart until the cart page uses this API (SCRUM-50). Return requests are recorded for the existing customer screen; refund approval/processing is not implemented. The wishlist remains browser-local. Account tax IDs still use demo placeholders.
 
-Both review comments and star ratings require approval, following the requested panel behavior; this differs from course requirement 5, which calls for immediate star publication. The original historical rating aggregates are seeded demo values.
+Star ratings contribute to the public aggregate immediately, while comments appear publicly only after Product Manager approval. The aggregate includes the original seeded demo ratings.
