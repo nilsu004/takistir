@@ -558,6 +558,12 @@ function Deliveries() {
               <dt>Delivery address</dt>
               <dd>{order.address}</dd>
             </div>
+            {order.deliveryPhone && (
+              <div>
+                <dt>Delivery phone</dt>
+                <dd>{order.deliveryPhone}</dd>
+              </div>
+            )}
             <div>
               <dt>Tracking reference</dt>
               <dd>{order.tracking || 'Not assigned in this demo'}</dd>

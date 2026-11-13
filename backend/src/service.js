@@ -114,6 +114,7 @@ async function loadOrders(c, whereSql, params) {
       status: o.status,
       items: orderItems,
       address: o.delivery_address,
+      ...(o.delivery_phone ? { deliveryPhone: o.delivery_phone } : {}),
       ...(o.tracking_number ? { tracking: o.tracking_number } : {}),
       ...(o.return_id
         ? {
@@ -450,6 +451,10 @@ export async function placeOrder(c, user, body) {
   });
   const address = body.address || {};
   const line = `${text(address.name, 'Recipient')} · ${text(address.street, 'Street', 300)}, ${text(address.city, 'City')} ${text(address.postcode, 'Postcode', 20)}`;
+  if ([...line].length > 600)
+    fail(400, 'Delivery address must contain at most 600 characters.');
+  const phone =
+    address.phone == null ? null : text(address.phone, 'Delivery phone', 40);
   for (const item of items)
     await c.query(
       'UPDATE products SET stock_quantity = stock_quantity - $2 WHERE id = $1',
@@ -461,9 +466,10 @@ export async function placeOrder(c, user, body) {
     const n = (await c.query("SELECT nextval('order_number_seq') AS n")).rows[0]
       .n;
     const { rows } = await c.query(
-      `INSERT INTO orders (id, customer_id, delivery_id, delivery_address, checkout_key)
-       VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING RETURNING id`,
-      [`TK-${n}`, user.id, `DL-TK-${n}`, line, key],
+      `INSERT INTO orders
+         (id, customer_id, delivery_id, delivery_address, checkout_key, delivery_phone)
+       VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING RETURNING id`,
+      [`TK-${n}`, user.id, `DL-TK-${n}`, line, key, phone],
     );
     id = rows[0]?.id;
   }
