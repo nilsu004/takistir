@@ -210,6 +210,67 @@ test('checkout validates the combined delivery address before saving the order',
   assert.equal(await stock('TK-002'), 6);
 });
 
+test('checkout saves the delivery phone and exposes it only with authorized orders', async (t) => {
+  const { db, client, newCustomer } = await api(t);
+  const [owner, other] = await Promise.all([newCustomer(1), newCustomer(2)]);
+  const phone = '+90 555 010 0020';
+  const placed = await owner('/orders', 'POST', {
+    key: 'delivery-contact',
+    items: [{ id: 'TK-001', qty: 1 }],
+    address: { ...address, phone: ` ${phone} ` },
+  });
+  assert.equal(placed.status, 200);
+  const id = placed.body.data;
+  const { rows } = await db.query(
+    'SELECT delivery_phone FROM orders WHERE id = $1',
+    [id],
+  );
+  assert.equal(rows[0].delivery_phone, phone);
+  const path = `/orders/${id}/invoice`;
+  const invoice = await owner(path);
+  assert.equal(invoice.status, 200);
+  assert.equal(invoice.body.deliveryPhone, phone);
+  assert.equal((await other(path)).status, 404);
+  assert.equal((await client()(path)).status, 401);
+  const otherState = await other('/state');
+  assert.deepEqual(otherState.body.state.orders, []);
+
+  const manager = client();
+  const login = await manager('/auth/login', 'POST', {
+    email: 'manager@takistir.local',
+    password: 'ManagerDemo!24',
+  });
+  assert.equal(login.status, 200);
+  const orders = login.body.state.orders;
+  assert.equal(orders.find((order) => order.id === id).deliveryPhone, phone);
+  assert.equal(
+    orders.find((order) => order.id === 'TK-1024').deliveryPhone,
+    undefined,
+  );
+});
+
+test('checkout rejects invalid delivery phone values without reducing stock', async (t) => {
+  const { newCustomer, stock } = await api(t);
+  const buyer = await newCustomer(1);
+  const order = {
+    key: 'invalid-delivery-phone',
+    items: [{ id: 'TK-001', qty: 1 }],
+  };
+  for (const phone of ['  ', '1'.repeat(41), 5550100020]) {
+    const response = await buyer('/orders', 'POST', {
+      ...order,
+      address: { ...address, phone },
+    });
+    assert.equal(response.status, 400);
+    assert.match(response.body.error, /Delivery phone/);
+  }
+  assert.equal(await stock('TK-001'), 12);
+  const accepted = await buyer('/orders', 'POST', { ...order, address });
+  assert.equal(accepted.status, 200);
+  const invoice = await buyer(`/orders/${accepted.body.data}/invoice`);
+  assert.equal(invoice.body.deliveryPhone, undefined);
+});
+
 test('many concurrent buyers: exactly the available stock is sold', async (t) => {
   const { db, newCustomer, stock } = await api(t);
   await db.query(
