@@ -660,7 +660,10 @@ function Reviews() {
     setReviewError('');
     setReviewError((await moderateReview(id, status)) || '');
   }
-  const shown = reviews.filter((r) => filter === 'All' || r.status === filter);
+  // Rating-only reviews have no comment to moderate.
+  const shown = reviews.filter(
+    (r) => r.comment && (filter === 'All' || r.status === filter),
+  );
   return (
     <>
       <h2>Review moderation</h2>
