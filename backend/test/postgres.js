@@ -2,7 +2,10 @@ import pg from 'pg';
 import { randomBytes } from 'node:crypto';
 import { createDb, migrate } from '../src/db.js';
 import { seedDemoData } from '../src/seed.js';
-import { startLocalPostgres } from '../src/local-postgres.js';
+import {
+  CREATE_UTF8_DATABASE,
+  startLocalPostgres,
+} from '../src/local-postgres.js';
 
 // One PostgreSQL server per test file; one fresh database per test.
 // Set TEST_DATABASE_URL (for example the Docker database) to use an existing
@@ -38,7 +41,7 @@ export async function freshDb(
 ) {
   await ensureServer();
   const name = `takistir_test_${randomBytes(6).toString('hex')}`;
-  await admin(`CREATE DATABASE ${name}`);
+  await admin(CREATE_UTF8_DATABASE(name));
   const url = new URL(adminUrl);
   url.pathname = `/${name}`;
   const db = createDb(url.toString(), { max: 5 });
