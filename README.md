@@ -54,3 +54,5 @@ File details are in the [frontend README](frontend/README.md) and [backend READM
 We track tasks and sprints in [Jira](https://watchstore.atlassian.net/jira/software/projects/SCRUM/boards/1/backlog). The [requirements checklist](docs/requirements.md) covers the course features and demo expectations, based on the [course guideline](docs/course-guideline.txt).
 
 Catalog/review completion notes, shared-file boundaries and backend handoff: [Sprint 2–3 frontend](docs/sprint-2-3-frontend.md).
+
+[Sales Manager workspace](docs/sales-manager.md): pricing, discounts, invoices, profit/loss and demo refund approval.

@@ -187,7 +187,17 @@ export function Product({ id }) {
           >
             {count ? `${rating} / 5 · ${count} ratings` : 'No ratings yet'}
           </a>
-          <p className="detail-price">{money(product.price)}</p>
+          <p className="detail-price">
+            {product.originalPrice != null && (
+              <>
+                <del className="muted">{money(product.originalPrice)}</del>{' '}
+              </>
+            )}
+            {money(product.price)}
+            {product.discount > 0 && (
+              <span className="badge">{product.discount}% off</span>
+            )}
+          </p>
           {product.price === null && (
             <p className="muted">
               Available to purchase after Sales Manager pricing.
@@ -422,6 +432,10 @@ export function Wishlist() {
   return (
     <main className="container page">
       <h1>Wishlist</h1>
+      <Notice>
+        Sign in as a customer and save products to receive in-app demo discount
+        notifications. Guest favourites stay in this browser.
+      </Notice>
       {wishlist.length ? (
         <ProductGrid
           products={products.filter((p) => wishlist.includes(p.id))}
