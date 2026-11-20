@@ -21,7 +21,7 @@ export function Button({
 }
 
 export function Header() {
-  const { cart, user, categories } = useStore();
+  const { cart, user, categories, notifications } = useStore();
   const [search, setSearch] = useState('');
   const count = cart.reduce((sum, item) => sum + item.qty, 0);
   return (
@@ -56,6 +56,14 @@ export function Header() {
           {user?.role === 'product-manager' && (
             <a href="#/product-manager">Management panel</a>
           )}
+          {user?.role === 'sales-manager' && (
+            <a href="#/sales-manager">Sales panel</a>
+          )}
+          {user?.role === 'customer' && (
+            <a href="#/notifications">
+              Notifications ({notifications.filter((n) => !n.readAt).length})
+            </a>
+          )}
           <a href="#/wishlist">♡ Wishlist</a>
           <a href="#/cart">Cart ({count})</a>
         </nav>
@@ -64,7 +72,7 @@ export function Header() {
         {['New arrivals', ...categories, 'All accessories'].map((name) => (
           <a
             key={name}
-            href={`#/catalog${['New arrivals', 'All accessories'].includes(name) ? '' : `?category=${name}`}`}
+            href={`#/catalog${['New arrivals', 'All accessories'].includes(name) ? '' : `?category=${encodeURIComponent(name)}`}`}
           >
             {name}
           </a>
@@ -118,13 +126,25 @@ export function ProductCard({ product }) {
         <ProductArt product={product} />
       </a>
       <p className="eyebrow">
-        {product.stock ? 'New arrivals' : 'Out of stock'}
+        {!product.stock
+          ? 'Out of stock'
+          : product.price === null
+            ? 'Price pending'
+            : product.collection || 'In stock'}
       </p>
       <h3>
         <a href={`#/product/${product.id}`}>{product.name}</a>
       </h3>
       <div className="card-price">
-        {money(product.price)}{' '}
+        <span>
+          {product.originalPrice != null && (
+            <>
+              <del className="muted">{money(product.originalPrice)}</del>{' '}
+            </>
+          )}
+          {money(product.price)}
+          {product.discount > 0 && <small> · {product.discount}% off</small>}
+        </span>{' '}
         <button
           className="heart"
           aria-label={`${saved ? 'Remove' : 'Save'} ${product.name} ${saved ? 'from' : 'to'} wishlist`}

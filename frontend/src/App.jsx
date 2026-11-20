@@ -5,6 +5,7 @@ import { Cart, Catalog, Home, Info, Product, Wishlist } from './Storefront.jsx';
 import { Checkout, Confirmation } from './Checkout.jsx';
 import { Invoice, Login, Order, Orders, Profile } from './Account.jsx';
 
+import SalesManager, { Notifications } from './sales/SalesManager.jsx';
 import ProductManager from './manager/ProductManager.jsx';
 
 function Router() {
@@ -25,11 +26,17 @@ function Router() {
     case undefined:
       page = <Home />;
       break;
+    case 'sales-manager':
+      page = <SalesManager />;
+      break;
+    case 'notifications':
+      page = <Notifications />;
+      break;
     case 'product-manager':
       page = <ProductManager />;
       break;
     case 'catalog':
-      page = <Catalog key={hash} params={params} />;
+      page = <Catalog params={params} />;
       break;
     case 'product':
       page = <Product key={id} id={id} />;

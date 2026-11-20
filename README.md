@@ -24,7 +24,7 @@ npm ci
 npm run dev
 ```
 
-Open <http://127.0.0.1:5173>. Both the frontend and backend start with this command. The preview uses sample data and does not require the backend. To run the preview on its own at port 5174, use `npm run dev --workspace frontend -- --port 5174`.
+Open <http://127.0.0.1:5173>. Both the frontend and backend start with this command and must run together. To use frontend port 5174, run `npm run dev --workspace frontend -- --port 5174` alongside the backend.
 
 Stop with `Ctrl+C`. Restart after changing backend code; frontend changes reload automatically. No `.env` file, Docker or separately installed database is needed for local testing: without `DATABASE_URL` the API starts its own PostgreSQL 17 in `backend/data/postgres`. To use the team Docker database instead, set `DATABASE_URL`. Database migrations run and known test accounts are seeded on first startup (never in production). See [backend setup](backend/README.md) and the [integration test guide](PRODUCT_MANAGER_DEMO.md).
 
@@ -53,13 +53,18 @@ File details are in the [frontend README](frontend/README.md) and [backend READM
 
 We track tasks and sprints in [Jira](https://watchstore.atlassian.net/jira/software/projects/SCRUM/boards/1/backlog). The [requirements checklist](docs/requirements.md) covers the course features and demo expectations, based on the [course guideline](docs/course-guideline.txt).
 
-## Local database
+Catalog/review completion notes, shared-file boundaries and backend handoff: [Sprint 2–3 frontend](docs/sprint-2-3-frontend.md).
 
-The project uses PostgreSQL running in Docker.
+[Sales Manager workspace](docs/sales-manager.md): pricing, discounts, invoices, profit/loss and demo refund approval.
+
+## Team Docker database (optional)
+
+Local development works without Docker. Use this when you want the shared team database instead of the API's built-in PostgreSQL.
 
 1. Install and open Docker Desktop.
-2. Start the database: `docker compose up -d`
-3. Copy the environment file: `cp backend/.env.example backend/.env`
-4. Stop the database when you are done: `docker compose down`
+2. Start the database: `docker compose up -d db`
+3. Copy the environment file: `cp backend/.env.example backend/.env`, then uncomment the `DATABASE_URL` line.
+4. Run `npm run dev` as usual. Migrations run on startup.
+5. Stop the database when you are done: `docker compose down` (add `-v` to delete its data).
 
 The credentials in `docker-compose.yml` are for local development only.

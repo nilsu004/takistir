@@ -2,7 +2,7 @@
 
 File: https://www.figma.com/design/430l6b1DWT8aHOe1554FXj/Takistir
 
-Detailed context and reference screenshots were received for **Home (2:25)** and **Product details (2:265)**. Other reads hit the Starter tool quota; no account was switched to bypass it. The customer preview implements these designs and adds consistent interactive customer flows. Manager interfaces remain out of scope for this preview.
+Detailed context and reference screenshots were received for **Home (2:25)** and **Product details (2:265)**. Other reads hit the Starter tool quota; no account was switched to bypass it. The customer preview implements these designs and adds consistent interactive customer flows. Manager interfaces now exist in `src/manager/`; they follow the shared visual language and are not claimed as a pixel-exact Figma conversion.
 
 The outer annotation labels in Figma are documentation, not website UI. They are excluded. Empty slogan layers are not rendered. Prices use English number formatting and TRY. Responsive adaptations preserve image aspect ratios and use normal layout instead of the generated absolute coordinates.
 

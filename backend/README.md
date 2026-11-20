@@ -23,6 +23,7 @@ On startup the API:
 | --------------- | ---------------------- | --------------- |
 | Customer        | deniz@example.com      | CustomerDemo!24 |
 | Product Manager | manager@takistir.local | ManagerDemo!24  |
+| Sales Manager   | sales@takistir.local   | SalesDemo!24    |
 
 Use **My account → Local test accounts** or enter these credentials. Use an incognito window or a different browser profile to run both roles simultaneously; ordinary tabs share cookies.
 
@@ -94,6 +95,8 @@ Guests and signed-in customers each have one cart; staff accounts have none (403
 
 `npm test` runs the HTTP integration, PostgreSQL and shared rule tests; `npm run check` also builds the frontend and checks formatting. Each test gets its own new database on a throwaway embedded PostgreSQL server. Set `TEST_DATABASE_URL` (for example `postgres://takistir:takistir@127.0.0.1:5432/postgres`) to use another server instead; test databases are created and dropped there, so never point it at real data.
 
-This backend does not yet add Sales Manager or Support Agent backend workflows, real payments, delivery-provider calls, invoice PDF generation/email, password recovery, email verification, production account provisioning, or checkout from the server cart (SCRUM-55). The frontend still keeps its own cart until the cart page uses this API (SCRUM-50). Return requests are recorded for the existing customer screen; refund approval/processing is not implemented. The wishlist remains browser-local. Account tax IDs still use demo placeholders.
+The Sales Manager demo workspace is implemented; see [its API/accounting guide](../docs/sales-manager.md). Support Agent workflows, real payments/refunds, delivery-provider calls, server invoice PDF generation/email, password recovery, email verification, production account provisioning and checkout from the server cart (SCRUM-55) remain separate. The frontend still keeps its own cart until the cart page uses this API (SCRUM-50). Return receipt/approval records a demo refund, stock restoration and customer notification atomically. Signed-in customer wishlists are persisted; guest wishlists remain browser-local. Account tax IDs still use demo placeholders.
 
-Both review comments and star ratings require approval, following the requested panel behavior; this differs from course requirement 5, which calls for immediate star publication. The original historical rating aggregates are seeded demo values.
+Star ratings publish immediately, independently of comment moderation. Each product in `/api/state` includes `publishedRating: { count, rating }`, computed from historical seed aggregates plus all submitted ratings. Pending/rejected comment text and customer IDs remain private to the author and Product Manager; public clients receive the aggregate and approved comments only. Approval/rejection does not change the star average. The original historical rating aggregates are seeded demo values.
+
+Sales migration `006` preserves paid price/cost snapshots and adds pricing/discounts, refund audit and private customer notifications. Browser invoice printing supports Save as PDF. See [Sales Manager](../docs/sales-manager.md) for period accounting and API contracts.
