@@ -56,3 +56,15 @@ We track tasks and sprints in [Jira](https://watchstore.atlassian.net/jira/softw
 Catalog/review completion notes, shared-file boundaries and backend handoff: [Sprint 2–3 frontend](docs/sprint-2-3-frontend.md).
 
 [Sales Manager workspace](docs/sales-manager.md): pricing, discounts, invoices, profit/loss and demo refund approval.
+
+## Team Docker database (optional)
+
+Local development works without Docker. Use this when you want the shared team database instead of the API's built-in PostgreSQL.
+
+1. Install and open Docker Desktop.
+2. Start the database: `docker compose up -d db`
+3. Copy the environment file: `cp backend/.env.example backend/.env`, then uncomment the `DATABASE_URL` line.
+4. Run `npm run dev` as usual. Migrations run on startup.
+5. Stop the database when you are done: `docker compose down` (add `-v` to delete its data).
+
+The credentials in `docker-compose.yml` are for local development only.
