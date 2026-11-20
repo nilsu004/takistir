@@ -460,6 +460,56 @@ test('only delivered purchases can be reviewed and moderation controls publicati
   );
 });
 
+test('a rating without a comment is published directly and skips moderation', async (t) => {
+  const { manager, customer, guest } = await fixture(t);
+  const before = (await guest('/state')).body.state.products.find(
+    (p) => p.id === 'TK-002',
+  ).publishedRating;
+  for (const comment of [undefined, '', '   ']) {
+    assert.equal(
+      (
+        await customer('/reviews', 'POST', {
+          productId: 'TK-002',
+          rating: 4,
+          comment,
+        })
+      ).status,
+      200,
+    );
+  }
+  const after = (await guest('/state')).body.state.products.find(
+    (p) => p.id === 'TK-002',
+  ).publishedRating;
+  assert.equal(after.count, before.count + 3);
+  const ratingOnly = (await manager('/state')).body.state.reviews.filter(
+    (r) => r.productId === 'TK-002' && r.comment === null,
+  );
+  assert.equal(ratingOnly.length, 3);
+  for (const review of ratingOnly) {
+    assert.equal(review.status, 'Approved');
+    // Nothing to moderate: the review is already final.
+    assert.equal(
+      (
+        await manager(`/manager/reviews/${review.id}`, 'PATCH', {
+          status: 'Rejected',
+        })
+      ).status,
+      409,
+    );
+  }
+  // A comment longer than the limit is still rejected.
+  assert.equal(
+    (
+      await customer('/reviews', 'POST', {
+        productId: 'TK-002',
+        rating: 4,
+        comment: 'x'.repeat(501),
+      })
+    ).status,
+    400,
+  );
+});
+
 test('state persists after reconnecting to the database and passwords are hashed', async (t) => {
   const { db, url } = await freshDb(t);
   await db.query(

@@ -547,16 +547,21 @@ export async function submitReview(c, user, body) {
   if (!rows.length) fail(404, 'Product not found.');
   if (!Number.isInteger(body.rating) || body.rating < 1 || body.rating > 5)
     fail(400, 'Rating must be between 1 and 5.');
+  // The comment is optional: a rating alone is published directly, while a
+  // comment waits for product manager approval (requirement 5).
+  const hasComment =
+    typeof body.comment === 'string' && body.comment.trim() !== '';
   await c.query(
-    `INSERT INTO reviews (id, product_id, customer_id, author_name, rating, comment)
-     VALUES ($1,$2,$3,$4,$5,$6)`,
+    `INSERT INTO reviews (id, product_id, customer_id, author_name, rating, comment, status)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
     [
       randomUUID(),
       rows[0].id,
       user.id,
       user.name,
       body.rating,
-      text(body.comment, 'Comment', 500),
+      hasComment ? text(body.comment, 'Comment', 500) : null,
+      hasComment ? 'Pending' : 'Approved',
     ],
   );
 }
