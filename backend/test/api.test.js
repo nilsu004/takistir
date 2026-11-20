@@ -61,7 +61,7 @@ const product = {
   model: 'WATCH-1',
   serial: 'SN-TEST',
   description: 'A watch for testing.',
-  category: 'Watches',
+  category: 'Anklets',
   stock: 2,
   warranty: '2 years',
   distributor: 'Takıştır',
@@ -82,11 +82,11 @@ const checkout = {
 test('login, HttpOnly sessions, role boundaries, account isolation and logout', async (t) => {
   const { manager, customer, guest, client } = await fixture(t);
   assert.equal(
-    (await guest('/manager/categories', 'POST', { name: 'Watches' })).status,
+    (await guest('/manager/categories', 'POST', { name: 'Anklets' })).status,
     401,
   );
   assert.equal(
-    (await customer('/manager/categories', 'POST', { name: 'Watches' })).status,
+    (await customer('/manager/categories', 'POST', { name: 'Anklets' })).status,
     403,
   );
   const publicState = (await guest('/state')).body.state;
@@ -148,7 +148,7 @@ test('request protection rejects missing headers and untrusted origins', async (
       await manager(
         '/manager/categories',
         'POST',
-        { name: 'Watches' },
+        { name: 'Anklets' },
         { 'X-Takistir-Request': '' },
       )
     ).status,
@@ -159,7 +159,7 @@ test('request protection rejects missing headers and untrusted origins', async (
       await manager(
         '/manager/categories',
         'POST',
-        { name: 'Watches' },
+        { name: 'Anklets' },
         { Origin: 'https://evil.example' },
       )
     ).status,
@@ -170,7 +170,7 @@ test('request protection rejects missing headers and untrusted origins', async (
 test('manager CRUD, category guards, stock validation and customer visibility', async (t) => {
   const { manager, customer } = await fixture(t);
   assert.equal(
-    (await manager('/manager/categories', 'POST', { name: 'Watches' })).status,
+    (await manager('/manager/categories', 'POST', { name: 'Anklets' })).status,
     200,
   );
   assert.equal(
@@ -188,7 +188,7 @@ test('manager CRUD, category guards, stock validation and customer visibility', 
     ),
   );
   assert.equal(
-    (await manager('/manager/categories/Watches', 'DELETE')).status,
+    (await manager('/manager/categories/Anklets', 'DELETE')).status,
     409,
   );
   assert.equal(
@@ -238,10 +238,10 @@ test('manager CRUD, category guards, stock validation and customer visibility', 
     ),
   );
   assert.equal(
-    (await manager('/manager/categories/Watches', 'DELETE')).status,
+    (await manager('/manager/categories/Anklets', 'DELETE')).status,
     200,
   );
-  await manager('/manager/categories', 'POST', { name: 'Watches' });
+  await manager('/manager/categories', 'POST', { name: 'Anklets' });
   assert.equal(
     (await manager('/manager/products', 'POST', product)).status,
     400,
@@ -257,7 +257,7 @@ test('pricing is protected and price-pending products cannot be purchased', asyn
     403,
   );
   assert.equal((await customer('/state')).body.state.products[0].price, 1250);
-  await manager('/manager/categories', 'POST', { name: 'Watches' });
+  await manager('/manager/categories', 'POST', { name: 'Anklets' });
   await manager('/manager/products', 'POST', product);
   assert.equal(
     (
@@ -465,7 +465,7 @@ test('state persists after reconnecting to the database and passwords are hashed
   await db.query(
     "UPDATE products SET stock_quantity = 7 WHERE code = 'TK-001'",
   );
-  await db.query("INSERT INTO categories (name) VALUES ('Watches')");
+  await db.query("INSERT INTO categories (name) VALUES ('Anklets')");
   const { rows } = await db.query(
     "SELECT password_hash FROM users WHERE email = 'deniz@example.com'",
   );
@@ -480,7 +480,7 @@ test('state persists after reconnecting to the database and passwords are hashed
     );
     assert.equal(stock.rows[0].stock_quantity, 7);
     const watches = await reopened.query(
-      "SELECT 1 FROM categories WHERE name = 'Watches'",
+      "SELECT 1 FROM categories WHERE name = 'Anklets'",
     );
     assert.equal(watches.rowCount, 1);
   } finally {
