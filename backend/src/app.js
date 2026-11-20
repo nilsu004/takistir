@@ -16,6 +16,7 @@ import {
   clearCart,
   deleteExpiredGuestCarts,
   mergeGuestCart,
+  removeOrderedItems,
   readCart,
   removeCartItem,
   setCartItem,
@@ -276,9 +277,13 @@ export function createApp({
     (c, r) => moderateReview(c, r.params.id, r.body?.status),
     'patch',
   );
-  mutation('/api/orders', customer, (c, r) =>
-    placeOrder(c, r.user, r.body || {}),
-  );
+  // SCRUM-55: the order, the stock decrease and the cart update are one
+  // transaction; if any step fails, none of them is saved.
+  mutation('/api/orders', customer, async (c, r) => {
+    const id = await placeOrder(c, r.user, r.body || {});
+    await removeOrderedItems(c, r.user.id, id);
+    return id;
+  });
   mutation('/api/orders/:id/cancel', customer, (c, r) =>
     cancelOrder(c, r.user, r.params.id),
   );
