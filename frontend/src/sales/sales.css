@@ -1,0 +1,182 @@
+.sales-page h2 {
+  margin-bottom: 16px;
+}
+.sales-page h3 {
+  font-size: 28px;
+  overflow-wrap: anywhere;
+}
+.sales-products,
+.sales-return-list {
+  display: grid;
+  gap: 24px;
+}
+.sales-select {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+}
+.sales-current {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.sales-price-form,
+.sales-range {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+.sales-price-form .field,
+.sales-range .field {
+  flex: 1;
+  min-width: 160px;
+  margin: 0;
+}
+.sales-range {
+  margin-bottom: 32px;
+}
+.sales-discount {
+  margin-top: 32px;
+}
+.sales-discount form > .field {
+  max-width: 240px;
+}
+.sales-preview {
+  list-style: none;
+  padding: 0;
+  margin: 20px 0;
+}
+.sales-preview li {
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 0;
+  overflow-wrap: anywhere;
+}
+.sales-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 24px 0;
+}
+.sales-metrics span {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+}
+.sales-metrics strong {
+  display: block;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 34px;
+  margin-top: 12px;
+  overflow-wrap: anywhere;
+}
+.sales-negative {
+  color: #9a2539;
+}
+.sales-chart {
+  margin: 32px 0;
+  padding: 24px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+}
+.sales-chart figcaption {
+  font-size: 20px;
+}
+.sales-chart-scroll {
+  overflow-x: auto;
+}
+.sales-chart svg {
+  display: block;
+  width: 100%;
+  min-width: 650px;
+}
+.sales-chart text {
+  fill: var(--muted);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+}
+.sales-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  font-size: 13px;
+}
+.sales-legend span:first-child {
+  color: var(--wine);
+}
+.sales-legend span:last-child {
+  color: #80583a;
+}
+.sales-chart-empty {
+  margin-block: 24px;
+}
+.sales-receipt {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 20px;
+  margin-top: 24px;
+}
+.sales-receipt label {
+  display: flex;
+  gap: 10px;
+  align-items: start;
+}
+.sales-reject {
+  display: block;
+  margin: 24px 0 16px;
+}
+.sales-confirm {
+  margin-top: 24px;
+  border: 1px solid var(--wine);
+  padding: 20px;
+}
+.sales-page .table-scroll {
+  margin-bottom: 24px;
+}
+@media (max-width: 800px) {
+  .sales-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sales-page .section-heading {
+    align-items: start;
+    flex-direction: column;
+  }
+  .sales-preview li {
+    flex-direction: column;
+    gap: 6px;
+  }
+  .sales-page table {
+    min-width: 680px;
+  }
+  .sales-chart {
+    padding: 16px;
+  }
+}
+@media (max-width: 420px) {
+  .sales-metrics {
+    grid-template-columns: 1fr;
+  }
+  .sales-price-form > .field,
+  .sales-range > .field {
+    min-width: 0;
+    flex-basis: 100%;
+  }
+  .sales-page .button-row {
+    flex-wrap: wrap;
+  }
+}
+
+.sales-page .eyebrow {
+  overflow-wrap: anywhere;
+}
+.sales-discount form {
+  display: grid;
+  gap: 16px;
+  justify-items: start;
+}

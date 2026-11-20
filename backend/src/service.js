@@ -6,8 +6,7 @@ import {
   validateProduct,
 } from '../../shared/catalog-rules.js';
 
-// Business rules and messages are unchanged from the SQLite version; only data
-// access moved to PostgreSQL. Every mutating function receives `c`, a client
+// PostgreSQL business rules. Every mutating function receives `c`, a client
 // that is already inside a transaction (see db.tx), so a thrown error rolls
 // back everything the function changed.
 
@@ -59,6 +58,8 @@ function productFromRow(r) {
     name: r.name,
     category: r.category,
     price: r.price,
+    originalPrice: r.discount_percent > 0 ? r.list_price : null,
+    discount: r.discount_percent,
     stock: r.stock_quantity,
     rating: r.seed_rating,
     ratingCount: r.seed_rating_count,
@@ -135,8 +136,8 @@ export async function getProduct(c, id) {
 /** Orders with their items and return requests, in the API's shape. */
 async function loadOrders(c, whereSql, params) {
   const { rows: orders } = await c.query(
-    `SELECT o.*, r.id AS return_id, r.status AS return_status, r.amount AS return_amount
-     FROM orders o LEFT JOIN return_requests r ON r.order_id = o.id
+    `SELECT o.*, u.name AS customer_name, u.email AS customer_email, r.id AS return_id, r.status AS return_status, r.amount AS return_amount, r.rejection_reason, r.received_at
+     FROM orders o JOIN users u ON u.id=o.customer_id LEFT JOIN return_requests r ON r.order_id = o.id
      WHERE ${whereSql} ORDER BY o.seq DESC`,
     params,
   );
@@ -169,6 +170,8 @@ async function loadOrders(c, whereSql, params) {
     return {
       id: o.id,
       customerId: o.customer_id,
+      customerName: o.customer_name,
+      customerEmail: o.customer_email,
       deliveryId: o.delivery_id,
       date: o.order_date,
       status: o.status,
@@ -180,6 +183,8 @@ async function loadOrders(c, whereSql, params) {
             returnRequest: {
               id: o.return_id,
               status: o.return_status,
+              reason: o.rejection_reason,
+              receivedAt: o.received_at,
               items: returned
                 .filter((r) => r.order_id === o.id)
                 .map((r) => ({
@@ -200,6 +205,7 @@ async function loadOrders(c, whereSql, params) {
  */
 export async function view(c, user) {
   const isManager = user?.role === 'product-manager';
+  const isSales = user?.role === 'sales-manager';
   // Before the first nextval() a sequence reports last_value = 1 with
   // is_called = false; treat that as revision 0.
   const revision = Number(
@@ -213,17 +219,21 @@ export async function view(c, user) {
   const orders = user
     ? await loadOrders(
         c,
-        isManager ? 'TRUE' : 'o.customer_id = $1',
-        isManager ? [] : [user.id],
+        isManager || isSales ? 'TRUE' : 'o.customer_id = $1',
+        isManager || isSales ? [] : [user.id],
       )
     : [];
   const historicalIds = orders.flatMap((o) => o.items.map((i) => i.id));
   const { rows: productRows } = await c.query(
-    `SELECT p.*, c.name AS category, ${ratingColumns} FROM products p
-     JOIN categories c ON c.id = p.category_id
+    `SELECT p.*, c.name AS category,
+       COALESCE(r.rating_count, 0)::int AS published_rating_count,
+       COALESCE(r.rating_sum, 0)::int AS published_rating_total
+     FROM products p JOIN categories c ON c.id = p.category_id
+     LEFT JOIN (SELECT product_id, count(*) AS rating_count, sum(rating) AS rating_sum
+                FROM reviews GROUP BY product_id) r ON r.product_id = p.id
      WHERE NOT p.archived OR $1 OR p.code = ANY($2)
      ORDER BY p.id`,
-    [isManager, historicalIds],
+    [isManager || isSales, historicalIds],
   );
   const { rows: reviewRows } = await c.query(
     `SELECT r.*, p.code FROM reviews r JOIN products p ON p.id = r.product_id
@@ -232,10 +242,42 @@ export async function view(c, user) {
     [isManager, user?.id ?? null],
   );
   return {
+    wishlist:
+      user?.role === 'customer'
+        ? (
+            await c.query(
+              'SELECT p.code FROM wishlist_items w JOIN products p ON p.id=w.product_id WHERE w.customer_id=$1 AND NOT p.archived ORDER BY p.id',
+              [user.id],
+            )
+          ).rows.map((r) => r.code)
+        : [],
+    notifications:
+      user?.role === 'customer'
+        ? (
+            await c.query(
+              'SELECT id, message, created_at AS "createdAt", read_at AS "readAt" FROM demo_notifications WHERE customer_id=$1 ORDER BY created_at DESC, id',
+              [user.id],
+            )
+          ).rows
+        : [],
     revision,
     user: publicUser(user),
     categories,
-    products: productRows.map(productFromRow),
+    products: productRows.map((row) => {
+      const product = productFromRow(row);
+      const count = (product.ratingCount || 0) + row.published_rating_count;
+      const sum =
+        (product.rating || 0) * (product.ratingCount || 0) +
+        row.published_rating_total;
+      return {
+        ...product,
+        ...(isSales ? { cost: row.cost, listPrice: row.list_price } : {}),
+        publishedRating: {
+          count,
+          rating: count ? (sum / count).toFixed(1) : 'No ratings yet',
+        },
+      };
+    }),
     orders,
     reviews: reviewRows.map((r) =>
       isManager || (user && r.customer_id === user.id)
@@ -424,7 +466,11 @@ export async function orderFor(c, user, id, { lock = false } = {}) {
   const { rows } = await c.query(
     `SELECT * FROM orders WHERE id = $1 AND ($2 OR customer_id = $3)
      ${lock ? 'FOR UPDATE' : ''}`,
-    [id, user?.role === 'product-manager', user?.id ?? null],
+    [
+      id,
+      ['product-manager', 'sales-manager'].includes(user?.role),
+      user?.id ?? null,
+    ],
   );
   if (!rows.length) fail(404, 'Order not found.');
   return rows[0];
@@ -463,7 +509,7 @@ export async function placeOrder(c, user, body) {
   // with the same products in a different order cannot deadlock. A competing
   // checkout waits here and then sees the reduced stock.
   const { rows: locked } = await c.query(
-    `SELECT id, code, name, image, price, stock_quantity FROM products
+    `SELECT id, code, name, image, price, cost, stock_quantity FROM products
      WHERE code = ANY($1) AND NOT archived ORDER BY id FOR UPDATE`,
     [[...ids]],
   );
@@ -487,6 +533,7 @@ export async function placeOrder(c, user, body) {
       image: p.image,
       qty: item.qty,
       price: p.price,
+      cost: p.cost ?? Math.round(Math.round(p.price * 100) / 2) / 100,
     };
   });
   const address = body.address || {};
@@ -511,8 +558,8 @@ export async function placeOrder(c, user, body) {
   for (const [position, item] of items.entries())
     await c.query(
       `INSERT INTO order_items (order_id, product_id, position, product_name,
-         product_image, quantity, unit_price)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+         product_image, quantity, unit_price, unit_cost)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
       [
         id,
         item.productId,
@@ -521,6 +568,7 @@ export async function placeOrder(c, user, body) {
         item.image,
         item.qty,
         item.price,
+        item.cost,
       ],
     );
   return id;

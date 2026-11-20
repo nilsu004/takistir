@@ -410,7 +410,7 @@ test('guests can browse, search and sort the catalog including sold-out products
 
 test('only delivered purchases can be reviewed and moderation controls comment publication', async (t) => {
   const { manager, customer, guest } = await fixture(t);
-  const before = (await guest('/products/TK-002')).body;
+  const beforeProduct = (await guest('/products/TK-002')).body;
   assert.equal(
     (
       await customer('/reviews', 'POST', {
@@ -431,6 +431,9 @@ test('only delivered purchases can be reviewed and moderation controls comment p
     ).status,
     400,
   );
+  const before = (await guest('/state')).body.state.products.find(
+    (p) => p.id === 'TK-002',
+  ).publishedRating;
   assert.equal(
     (
       await customer('/reviews', 'POST', {
@@ -447,11 +450,31 @@ test('only delivered purchases can be reviewed and moderation controls comment p
   const published = (await guest('/state')).body.state.products.find(
     (p) => p.id === 'TK-002',
   );
-  assert.equal(published.publishedRatingCount, before.publishedRatingCount + 1);
-  assert.equal(published.publishedRatingTotal, before.publishedRatingTotal + 1);
+  assert.equal(
+    published.publishedRatingCount,
+    beforeProduct.publishedRatingCount + 1,
+  );
+  assert.equal(
+    published.publishedRatingTotal,
+    beforeProduct.publishedRatingTotal + 1,
+  );
   assert(
     !(await guest('/state')).body.state.reviews.some((r) => r.id === review.id),
   );
+  const pendingState = (await guest('/state')).body.state;
+  const pendingRating = pendingState.products.find(
+    (p) => p.id === 'TK-002',
+  ).publishedRating;
+  assert.equal(pendingRating.count, before.count + 1);
+  assert(!JSON.stringify(pendingState).includes('A pending comment'));
+  assert(!JSON.stringify(pendingState).includes('CU-001'));
+  for (const read of [manager, customer]) {
+    assert.deepEqual(
+      (await read('/state')).body.state.products.find((p) => p.id === 'TK-002')
+        .publishedRating,
+      pendingRating,
+    );
+  }
   assert.equal(
     (await guest('/products/TK-002')).body.publishedRatingCount,
     published.publishedRatingCount,
@@ -467,6 +490,11 @@ test('only delivered purchases can be reviewed and moderation controls comment p
   assert(
     !(await guest('/state')).body.state.reviews.some((r) => r.id === review.id),
   );
+  assert.deepEqual(
+    (await guest('/state')).body.state.products.find((p) => p.id === 'TK-002')
+      .publishedRating,
+    pendingRating,
+  );
   assert.equal(
     (await manager('/manager/reviews/RV-DEMO', 'PATCH', { status: 'Approved' }))
       .status,
@@ -476,6 +504,11 @@ test('only delivered purchases can be reviewed and moderation controls comment p
     (await guest('/state')).body.state.reviews.some(
       (r) => r.id === 'RV-DEMO' && r.status === 'Approved',
     ),
+  );
+  assert.deepEqual(
+    (await guest('/state')).body.state.products.find((p) => p.id === 'TK-002')
+      .publishedRating,
+    pendingRating,
   );
   assert.equal(
     (await manager('/manager/reviews/RV-DEMO', 'PATCH', { status: 'Rejected' }))
