@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { recordMockPayment } from './mock-payments.js';
 import { returnEligible } from '../../shared/order-rules.js';
 import { canTransition, validateProduct } from '../../shared/catalog-rules.js';
 
@@ -513,6 +514,13 @@ export async function placeOrder(c, user, body) {
         item.cost,
       ],
     );
+  await recordMockPayment(c, {
+    customerId: user.id,
+    checkoutKey: key,
+    attemptKey: `order:${id}`,
+    outcome: 'succeeded',
+    orderId: id,
+  });
   return id;
 }
 export async function cancelOrder(c, user, id) {
