@@ -27,7 +27,10 @@ import {
   customer,
   fail,
   findUser,
+  getProduct,
   invoiceFor,
+  listCategories,
+  listProducts,
   manager,
   moderateReview,
   placeOrder,
@@ -215,6 +218,15 @@ export function createApp({
     await send(req, res);
   });
   app.get('/api/state', (req, res) => send(req, res));
+  app.get('/api/categories', async (_req, res) => {
+    res.json({ data: await listCategories(db) });
+  });
+  app.get('/api/products', async (req, res) => {
+    res.json({ data: await listProducts(db, req.query) });
+  });
+  app.get('/api/products/:id', async (req, res) => {
+    res.json(await getProduct(db, req.params.id));
+  });
   // Every state change: role check → one transaction → revision bump → snapshot.
   function mutation(path, role, fn, method = 'post') {
     app[method](path, async (req, res) => {
