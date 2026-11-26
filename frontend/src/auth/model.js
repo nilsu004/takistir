@@ -62,6 +62,7 @@ export function signedInDestination(
   profileError = '',
 ) {
   if (user.role === 'product-manager') return '/product-manager';
+  if (user.role === 'sales-manager') return '/sales-manager';
   if (user.role !== 'customer') return '/account';
   if (profileError) return '/account';
   const destination = safeDestination(next);

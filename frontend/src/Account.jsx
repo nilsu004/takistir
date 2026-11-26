@@ -39,6 +39,12 @@ export function AccountShell({ children, active }) {
               ['Profile', '/account'],
               ['Orders', '/orders'],
               ['Wishlist', '/wishlist'],
+              ...(user.role === 'customer'
+                ? [['Notifications', '/notifications']]
+                : []),
+              ...(user.role === 'sales-manager'
+                ? [['Sales panel', '/sales-manager']]
+                : []),
               ...(user.role === 'product-manager'
                 ? [['Management panel', '/product-manager']]
                 : []),
@@ -350,9 +356,19 @@ export function Order({ id }) {
             ))}
           </ul>
           <strong>Refund amount: {money(order.returnRequest.amount)}</strong>
+          {order.returnRequest.reason && (
+            <p>Reason: {order.returnRequest.reason}</p>
+          )}
+          {order.returnRequest.status === 'Approved' && (
+            <p>
+              Demo refund approved. Returned items have been restocked. See
+              Notifications for confirmation.
+            </p>
+          )}
           <p className="muted">
-            Original amount paid, including any discount. This preview does not
-            issue a refund or send email.
+            Original amount paid, including any discount. Approved returns
+            record a demo refund and in-app notification; no real payment or
+            email is sent.
           </p>
         </div>
       )}
@@ -377,8 +393,13 @@ export function Invoice({ id }) {
   return (
     <main className="container page invoice-page">
       <div className="button-row no-print">
-        <a className="text-button" href={`#/orders/${id}`}>
-          ← Order details
+        <a
+          className="text-button"
+          href={
+            user.role === 'sales-manager' ? '#/sales-manager' : `#/orders/${id}`
+          }
+        >
+          ← {user.role === 'sales-manager' ? 'Sales panel' : 'Order details'}
         </a>
         <Button secondary onClick={() => window.print()}>
           Print / Save PDF
@@ -392,12 +413,14 @@ export function Invoice({ id }) {
             <p>TK-F-{id.replace('TK-', '')}</p>
           </div>
         </div>
-        <p>{displayDate(order.date)}</p>
+        <p>
+          {displayDate(order.date)} · {order.status}
+        </p>
         <h2>Bill to</h2>
         <p>
-          {user.name}
+          {order.customerName || user.name}
           <br />
-          {user.email}
+          {order.customerEmail || user.email}
           <br />
           {order.address}
         </p>

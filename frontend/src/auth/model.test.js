@@ -128,6 +128,10 @@ test('staff and customer destinations respect roles and cart loading failure', (
     '/product-manager',
   );
   assert.equal(
+    signedInDestination({ role: 'sales-manager' }, '/checkout/delivery'),
+    '/sales-manager',
+  );
+  assert.equal(
     signedInDestination({ role: 'support-agent' }, '/cart'),
     '/account',
   );

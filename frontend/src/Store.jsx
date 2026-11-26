@@ -42,7 +42,7 @@ export function StoreProvider({ children }) {
   const cartItems = cartState.items;
   const cart = cartItems.map(({ id, qty }) => ({ id, qty }));
   const total = cartState.total;
-  const [wishlist, setWishlist] = useState(() =>
+  const [guestWishlist, setGuestWishlist] = useState(() =>
     readSaved(
       'wishlist',
       [],
@@ -56,6 +56,8 @@ export function StoreProvider({ children }) {
   const allProducts = snapshot?.products || [];
   const products = allProducts.filter((p) => !p.archived);
   const user = snapshot?.user || null;
+  const wishlist =
+    user?.role === 'customer' ? snapshot?.wishlist || [] : guestWishlist;
 
   function apply(state) {
     if (sessionUser.current?.id !== state.user?.id) checkoutClient.reset();
@@ -105,7 +107,7 @@ export function StoreProvider({ children }) {
     const visible = new Set(
       snapshot.products.filter((p) => !p.archived).map((p) => p.id),
     );
-    setWishlist((items) => items.filter((id) => visible.has(id)));
+    setGuestWishlist((items) => items.filter((id) => visible.has(id)));
   }, [snapshot]);
   useEffect(() => {
     setAddress(null);
@@ -114,12 +116,12 @@ export function StoreProvider({ children }) {
     try {
       localStorage.setItem(
         'takistir-preview:wishlist',
-        JSON.stringify(wishlist),
+        JSON.stringify(guestWishlist),
       );
     } catch {
       /* Storage is optional. */
     }
-  }, [wishlist]);
+  }, [guestWishlist]);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(''), 4000);
@@ -234,7 +236,7 @@ export function StoreProvider({ children }) {
         '/reviews',
         'POST',
         { productId, rating, comment },
-        'Your rating and comment are awaiting approval.',
+        'Your rating is published. Your comment is awaiting approval.',
       )
     ).error;
   }
@@ -309,7 +311,21 @@ export function StoreProvider({ children }) {
     return cartAction(() => cartClient.clear(), 'Cart cleared.');
   }
   function toggleWishlist(id) {
-    setWishlist((items) =>
+    if (user?.role === 'customer') {
+      return mutate(
+        `/wishlist/items/${encodeURIComponent(id)}`,
+        wishlist.includes(id) ? 'DELETE' : 'PUT',
+        undefined,
+        wishlist.includes(id)
+          ? 'Removed from wishlist.'
+          : 'Saved. Discount demo notifications are enabled for this product.',
+      );
+    }
+    if (user) {
+      setToast('Sign in as a customer to save products.');
+      return;
+    }
+    setGuestWishlist((items) =>
       items.includes(id) ? items.filter((item) => item !== id) : [...items, id],
     );
   }
@@ -356,6 +372,16 @@ export function StoreProvider({ children }) {
     <StoreContext.Provider
       value={{
         products,
+        revision: snapshot?.revision,
+        notifications: snapshot?.notifications || [],
+        markNotificationRead: (id) =>
+          mutate(
+            `/notifications/${encodeURIComponent(id)}/read`,
+            'PATCH',
+            {},
+            'Notification marked as read.',
+          ),
+        salesAction: mutate,
         allProducts,
         categories: snapshot?.categories || [],
         orders: snapshot?.orders || [],

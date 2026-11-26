@@ -13,7 +13,7 @@ The existing React cart now uses the existing cart API. Backend code, database s
 - Initial loading, empty cart, retry, stale-data errors, write errors and success feedback are distinct. Failed writes do not optimistically change the cart.
 - `Store.jsx` shares this cart with the header and checkout. Account changes immediately clear the previous cart view and reload the correct server cart. Staff accounts do not request or modify a cart.
 - `Quantity` accepts an optional disabled prop. `Summary` labels unavailable lines correctly. Checkout has minimal loading/unavailability guards to preserve the existing flow.
-- Cart data is no longer read from or written to localStorage. Old preview carts, including the automatically prefilled sample items, are not imported. Wishlist behavior is unchanged.
+- Cart data is stored by the API. Old preview carts, including the automatically prefilled sample items, are not imported. The guest wishlist stays in localStorage, and the signed-in customer wishlist is stored by the API.
 
 ## Try it locally
 

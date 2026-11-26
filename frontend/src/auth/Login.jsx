@@ -224,7 +224,7 @@ export function Login({ register = false, next = '/account' }) {
                 <summary>Local test accounts</summary>
                 <p>
                   Use separate browser profiles or an incognito window to test
-                  both roles at once.
+                  multiple roles at once.
                 </p>
                 <div className="form-stack">
                   <Button
@@ -244,6 +244,15 @@ export function Login({ register = false, next = '/account' }) {
                     }
                   >
                     Use Product Manager demo
+                  </Button>
+                  <Button
+                    secondary
+                    disabled={waiting}
+                    onClick={() =>
+                      signIn('sales@takistir.local', 'SalesDemo!24')
+                    }
+                  >
+                    Use Sales Manager demo
                   </Button>
                 </div>
               </details>
