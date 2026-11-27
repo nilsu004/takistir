@@ -18,9 +18,12 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
     );
   }
   const result = await response.json().catch(() => null);
-  if (!response.ok || !result)
-    throw new Error(
+  if (!response.ok || !result) {
+    const error = new Error(
       result?.error || 'The API returned an unexpected response.',
     );
+    error.status = response.status;
+    throw error;
+  }
   return result;
 }

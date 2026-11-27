@@ -1,0 +1,24 @@
+.checkout-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.checkout-field-error {
+  display: block;
+  margin-top: 8px;
+  color: var(--wine);
+}
+.checkout-history-link {
+  display: block;
+  margin-top: 20px;
+}
+.checkout-page .notice,
+.checkout-page .delivery-summary {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 420px) {
+  .checkout-page .form-row {
+    grid-template-columns: 1fr;
+  }
+}

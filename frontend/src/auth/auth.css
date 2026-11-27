@@ -1,0 +1,40 @@
+.auth-panel {
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.auth-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.auth-field-error {
+  display: block;
+  color: var(--wine);
+  margin-top: 8px;
+}
+.auth-password-toggle {
+  justify-self: start;
+}
+.auth-password-help {
+  margin: 0;
+}
+.auth-account-link {
+  display: block;
+  margin-top: 20px;
+}
+.auth-notice {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  justify-content: space-between;
+}
+.auth-notice p {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.auth-notice button {
+  flex-shrink: 0;
+}

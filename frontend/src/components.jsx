@@ -171,12 +171,18 @@ export function ProductGrid({ products }) {
   );
 }
 
-export function Quantity({ value, onChange, max, label = 'Quantity' }) {
+export function Quantity({
+  value,
+  onChange,
+  max,
+  label = 'Quantity',
+  disabled = false,
+}) {
   return (
     <div className="quantity" role="group" aria-label={label}>
       <button
         aria-label={`Decrease ${label.toLowerCase()}`}
-        disabled={value <= 1}
+        disabled={disabled || value <= 1}
         onClick={() => onChange(value - 1)}
       >
         −
@@ -184,7 +190,7 @@ export function Quantity({ value, onChange, max, label = 'Quantity' }) {
       <output aria-label={label}>{value}</output>
       <button
         aria-label={`Increase ${label.toLowerCase()}`}
-        disabled={value >= max}
+        disabled={disabled || value >= max}
         onClick={() => onChange(value + 1)}
       >
         +
@@ -235,7 +241,9 @@ export function Summary({ children }) {
           <span>
             {item.name} × {item.qty}
           </span>
-          <span>{money(item.price * item.qty)}</span>
+          <span>
+            {item.available ? money(item.price * item.qty) : 'Unavailable'}
+          </span>
         </div>
       ))}
       <hr />
