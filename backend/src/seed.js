@@ -80,8 +80,8 @@ export async function seedDemoData(db) {
           p.description,
           p.stock,
           p.price,
-          '2 years',
-          'Takıştır',
+          p.warranty ?? '2 years',
+          p.distributor ?? 'Takıştır',
           p.material,
           p.image,
           p.detailImage ?? null,
@@ -89,7 +89,7 @@ export async function seedDemoData(db) {
           p.popularity,
           p.price,
           p.rating,
-          p.popularity,
+          p.ratingCount,
         ],
       );
       productIds.set(p.id, rows[0].id);
