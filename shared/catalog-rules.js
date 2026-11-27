@@ -4,11 +4,13 @@ export const initialCategories = [
   'Earrings',
   'Rings',
   'Bracelets',
+  'Watches',
 ];
 export const productImages = [
   'necklace-card.svg',
   'earrings-card.svg',
   'ring-card.svg',
+  'watch-card.svg',
 ];
 
 export function validateProduct(product, products, categories, editingId) {
