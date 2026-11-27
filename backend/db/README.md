@@ -76,3 +76,24 @@ FROM products;
 Financial reports must use the relevant sale-time price when applying the 50%
 fallback, rather than a later catalogue price. Order price/cost snapshots belong
 to the order schema, outside SCRUM-42. An explicit zero cost stays zero.
+
+## Consistency checks (SCRUM-72)
+
+`checks/consistency.sql` is a read-only query that lists data problems the
+table constraints cannot catch on their own: active products in deleted
+categories, orders without items or placed by staff, returns for undelivered
+orders or for more units than were bought, approved returns without a refund
+(or refunds without an approved return), refunds that differ from the price
+paid, reviews without a delivered purchase, and prices above the list price.
+An empty result means the data is consistent. Run it before a demo or after
+changing data by hand:
+
+```sh
+docker compose exec -T db psql -U takistir -d takistir < backend/db/checks/consistency.sql
+```
+
+`backend/test/consistency.test.js` runs the same file on a fresh seeded
+database, after a full buy → cancel → deliver → return → review flow (checking
+that stock equals seed stock − sold + cancelled + approved returns), and once
+per check with a deliberately broken row. It also checks that migration files
+are numbered 001, 002, … without duplicates.
