@@ -204,6 +204,53 @@ export async function mergeGuestCart(c, guestTokenHash, customerId) {
   return summary;
 }
 
+/**
+ * SCRUM-55: after a new order is created, the ordered quantities are taken
+ * out of the customer's cart in the same transaction, so the order and the
+ * cart can never disagree (no separate "clear cart" request that may fail).
+ * - A cart line ordered in full is removed; a larger cart quantity is reduced.
+ * - Products in the cart that were not ordered stay untouched.
+ * - Runs only for an order created in this transaction (created_at = now()),
+ *   so a retried checkout that returns an existing order never removes items
+ *   the customer added again later.
+ * Returns the number of cart lines changed.
+ */
+export async function removeOrderedItems(c, customerId, orderId) {
+  const created = await c.query(
+    `SELECT 1 FROM orders
+     WHERE id = $1 AND customer_id = $2 AND created_at = now()`,
+    [orderId, customerId],
+  );
+  if (!created.rowCount) return 0;
+  const cartId = await findCartId(
+    c,
+    { column: 'customer_id', value: customerId },
+    { lock: true },
+  );
+  if (!cartId) return 0;
+  // Delete fully ordered lines first, then reduce the rest; the other order
+  // would let a reduced line match the delete condition afterwards.
+  const removed = await c.query(
+    `DELETE FROM cart_items i USING order_items o
+     WHERE i.cart_id = $1 AND o.order_id = $2
+       AND o.product_id = i.product_id AND i.quantity <= o.quantity`,
+    [cartId, orderId],
+  );
+  const reduced = await c.query(
+    `UPDATE cart_items i SET quantity = i.quantity - o.quantity
+     FROM order_items o
+     WHERE i.cart_id = $1 AND o.order_id = $2
+       AND o.product_id = i.product_id AND i.quantity > o.quantity`,
+    [cartId, orderId],
+  );
+  const changed = removed.rowCount + reduced.rowCount;
+  if (changed)
+    await c.query('UPDATE carts SET updated_at = now() WHERE id = $1', [
+      cartId,
+    ]);
+  return changed;
+}
+
 /** Deletes guest carts that have not changed for 30 days. */
 export async function deleteExpiredGuestCarts(db) {
   await db.query(
