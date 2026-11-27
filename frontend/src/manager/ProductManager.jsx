@@ -481,7 +481,11 @@ function Deliveries() {
       </p>
       <label className="field">
         Filter by status
-        <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+        <select
+          aria-label="Review status"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        >
           {['All', ...orderStatuses, 'Cancelled'].map((s) => (
             <option key={s}>{s}</option>
           ))}
@@ -651,22 +655,39 @@ function Deliveries() {
 function Reviews() {
   const { reviews, allProducts, moderateReview } = useStore();
   const [filter, setFilter] = useState('Pending');
-  const shown = reviews.filter((r) => filter === 'All' || r.status === filter);
+  const [reviewError, setReviewError] = useState('');
+  async function moderate(id, status) {
+    setReviewError('');
+    setReviewError((await moderateReview(id, status)) || '');
+  }
+  // Rating-only reviews have no comment to moderate.
+  const shown = reviews.filter(
+    (r) => r.comment && (filter === 'All' || r.status === filter),
+  );
   return (
     <>
-      <h2>A considered collection</h2>
+      <h2>Review moderation</h2>
       <p className="muted">
-        Approve or reject each review. Both the comment and its star rating are
-        published only after approval.
+        Approve or reject each comment. Star ratings are published immediately
+        and are not affected by comment moderation.
       </p>
       <label className="field">
         Review status
-        <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+        <select
+          aria-label="Review status"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        >
           {['Pending', 'Approved', 'Rejected', 'All'].map((s) => (
             <option key={s}>{s}</option>
           ))}
         </select>
       </label>
+      {reviewError && (
+        <p className="manager-error" role="alert">
+          {reviewError}
+        </p>
+      )}
       {shown.length ? (
         <div className="manager-review-list">
           {shown.map((r) => (
@@ -692,14 +713,11 @@ function Reviews() {
               <p className="manager-comment">{r.comment}</p>
               {r.status === 'Pending' && (
                 <div className="manager-actions">
-                  <Button onClick={() => moderateReview(r.id, 'Approved')}>
-                    Approve review
+                  <Button onClick={() => moderate(r.id, 'Approved')}>
+                    Approve comment
                   </Button>
-                  <Button
-                    secondary
-                    onClick={() => moderateReview(r.id, 'Rejected')}
-                  >
-                    Reject review
+                  <Button secondary onClick={() => moderate(r.id, 'Rejected')}>
+                    Reject comment
                   </Button>
                 </div>
               )}

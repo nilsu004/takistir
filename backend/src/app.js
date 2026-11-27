@@ -1,3 +1,12 @@
+import {
+  salesManager,
+  setPricing,
+  applyDiscount,
+  saveWishlist,
+  readNotification,
+  resolveReturn,
+  salesWorkspace,
+} from './sales.js';
 import express from 'express';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { passwordHash, passwordMatches } from './passwords.js';
@@ -278,6 +287,42 @@ export function createApp({
   );
   mutation('/api/reviews', customer, (c, r) =>
     submitReview(c, r.user, r.body || {}),
+  );
+  mutation(
+    '/api/sales/products/:id/pricing',
+    salesManager,
+    (c, r) => setPricing(c, r.params.id, r.body || {}),
+    'patch',
+  );
+  mutation('/api/sales/discounts', salesManager, (c, r) =>
+    applyDiscount(c, r.user, r.body || {}),
+  );
+  mutation('/api/sales/returns/:id/:action', salesManager, (c, r) =>
+    resolveReturn(c, r.user, r.params.id, r.params.action, r.body || {}),
+  );
+  app.get('/api/sales/workspace', async (req, res) => {
+    salesManager(req.user);
+    res.json(
+      await db.tx((c) => salesWorkspace(c, req.query), { readOnly: true }),
+    );
+  });
+  mutation(
+    '/api/wishlist/items/:id',
+    customer,
+    (c, r) => saveWishlist(c, r.user, r.params.id, true),
+    'put',
+  );
+  mutation(
+    '/api/wishlist/items/:id',
+    customer,
+    (c, r) => saveWishlist(c, r.user, r.params.id, false),
+    'delete',
+  );
+  mutation(
+    '/api/notifications/:id/read',
+    customer,
+    (c, r) => readNotification(c, r.user, r.params.id),
+    'patch',
   );
   // SCRUM-49: cart for guests (cookie) and signed-in customers (account).
   // Every endpoint returns the cart as { items, total }.

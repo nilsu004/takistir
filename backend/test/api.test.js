@@ -1,6 +1,7 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { randomUUID } from 'node:crypto';
 import { createApp } from '../src/app.js';
 import { createDb, migrate } from '../src/db.js';
 import { passwordMatches } from '../src/passwords.js';
@@ -53,7 +54,27 @@ async function fixture(t) {
     ).status,
     200,
   );
-  return { db, client, manager, customer, guest };
+  // Buys a product as Deniz and lets the product manager deliver it, so the
+  // purchase can be reviewed (one review per delivered purchase).
+  async function deliveredPurchase(code, qty = 1) {
+    const r = await customer('/orders', 'POST', {
+      ...checkout,
+      key: randomUUID(),
+      items: [{ id: code, qty }],
+    });
+    assert.equal(r.status, 200);
+    for (const status of ['In transit', 'Delivered'])
+      assert.equal(
+        (
+          await manager(`/manager/orders/${r.body.data}/status`, 'PATCH', {
+            status,
+          })
+        ).status,
+        200,
+      );
+    return r.body.data;
+  }
+  return { db, client, manager, customer, guest, deliveredPurchase };
 }
 const product = {
   id: 'TK-TEST',
@@ -61,7 +82,7 @@ const product = {
   model: 'WATCH-1',
   serial: 'SN-TEST',
   description: 'A watch for testing.',
-  category: 'Watches',
+  category: 'Anklets',
   stock: 2,
   warranty: '2 years',
   distributor: 'Takıştır',
@@ -82,11 +103,11 @@ const checkout = {
 test('login, HttpOnly sessions, role boundaries, account isolation and logout', async (t) => {
   const { manager, customer, guest, client } = await fixture(t);
   assert.equal(
-    (await guest('/manager/categories', 'POST', { name: 'Watches' })).status,
+    (await guest('/manager/categories', 'POST', { name: 'Anklets' })).status,
     401,
   );
   assert.equal(
-    (await customer('/manager/categories', 'POST', { name: 'Watches' })).status,
+    (await customer('/manager/categories', 'POST', { name: 'Anklets' })).status,
     403,
   );
   const publicState = (await guest('/state')).body.state;
@@ -148,7 +169,7 @@ test('request protection rejects missing headers and untrusted origins', async (
       await manager(
         '/manager/categories',
         'POST',
-        { name: 'Watches' },
+        { name: 'Anklets' },
         { 'X-Takistir-Request': '' },
       )
     ).status,
@@ -159,7 +180,7 @@ test('request protection rejects missing headers and untrusted origins', async (
       await manager(
         '/manager/categories',
         'POST',
-        { name: 'Watches' },
+        { name: 'Anklets' },
         { Origin: 'https://evil.example' },
       )
     ).status,
@@ -170,7 +191,7 @@ test('request protection rejects missing headers and untrusted origins', async (
 test('manager CRUD, category guards, stock validation and customer visibility', async (t) => {
   const { manager, customer } = await fixture(t);
   assert.equal(
-    (await manager('/manager/categories', 'POST', { name: 'Watches' })).status,
+    (await manager('/manager/categories', 'POST', { name: 'Anklets' })).status,
     200,
   );
   assert.equal(
@@ -188,7 +209,7 @@ test('manager CRUD, category guards, stock validation and customer visibility', 
     ),
   );
   assert.equal(
-    (await manager('/manager/categories/Watches', 'DELETE')).status,
+    (await manager('/manager/categories/Anklets', 'DELETE')).status,
     409,
   );
   assert.equal(
@@ -238,10 +259,10 @@ test('manager CRUD, category guards, stock validation and customer visibility', 
     ),
   );
   assert.equal(
-    (await manager('/manager/categories/Watches', 'DELETE')).status,
+    (await manager('/manager/categories/Anklets', 'DELETE')).status,
     200,
   );
-  await manager('/manager/categories', 'POST', { name: 'Watches' });
+  await manager('/manager/categories', 'POST', { name: 'Anklets' });
   assert.equal(
     (await manager('/manager/products', 'POST', product)).status,
     400,
@@ -257,7 +278,7 @@ test('pricing is protected and price-pending products cannot be purchased', asyn
     403,
   );
   assert.equal((await customer('/state')).body.state.products[0].price, 1250);
-  await manager('/manager/categories', 'POST', { name: 'Watches' });
+  await manager('/manager/categories', 'POST', { name: 'Anklets' });
   await manager('/manager/products', 'POST', product);
   assert.equal(
     (
@@ -368,7 +389,9 @@ test('delivery transitions appear in customer history and survive product remova
 });
 
 test('only delivered purchases can be reviewed and moderation controls publication', async (t) => {
-  const { manager, customer, guest } = await fixture(t);
+  const { manager, customer, guest, deliveredPurchase } = await fixture(t);
+  // The seeded delivered order of TK-002 is already reviewed (RV-DEMO).
+  await deliveredPurchase('TK-002');
   assert.equal(
     (
       await customer('/reviews', 'POST', {
@@ -389,6 +412,9 @@ test('only delivered purchases can be reviewed and moderation controls publicati
     ).status,
     400,
   );
+  const before = (await guest('/state')).body.state.products.find(
+    (p) => p.id === 'TK-002',
+  ).publishedRating;
   assert.equal(
     (
       await customer('/reviews', 'POST', {
@@ -405,6 +431,20 @@ test('only delivered purchases can be reviewed and moderation controls publicati
   assert(
     !(await guest('/state')).body.state.reviews.some((r) => r.id === review.id),
   );
+  const pendingState = (await guest('/state')).body.state;
+  const pendingRating = pendingState.products.find(
+    (p) => p.id === 'TK-002',
+  ).publishedRating;
+  assert.equal(pendingRating.count, before.count + 1);
+  assert(!JSON.stringify(pendingState).includes('A pending comment'));
+  assert(!JSON.stringify(pendingState).includes('CU-001'));
+  for (const read of [manager, customer]) {
+    assert.deepEqual(
+      (await read('/state')).body.state.products.find((p) => p.id === 'TK-002')
+        .publishedRating,
+      pendingRating,
+    );
+  }
   assert.equal(
     (
       await manager(`/manager/reviews/${review.id}`, 'PATCH', {
@@ -416,6 +456,11 @@ test('only delivered purchases can be reviewed and moderation controls publicati
   assert(
     !(await guest('/state')).body.state.reviews.some((r) => r.id === review.id),
   );
+  assert.deepEqual(
+    (await guest('/state')).body.state.products.find((p) => p.id === 'TK-002')
+      .publishedRating,
+    pendingRating,
+  );
   assert.equal(
     (await manager('/manager/reviews/RV-DEMO', 'PATCH', { status: 'Approved' }))
       .status,
@@ -426,6 +471,11 @@ test('only delivered purchases can be reviewed and moderation controls publicati
       (r) => r.id === 'RV-DEMO' && r.status === 'Approved',
     ),
   );
+  assert.deepEqual(
+    (await guest('/state')).body.state.products.find((p) => p.id === 'TK-002')
+      .publishedRating,
+    pendingRating,
+  );
   assert.equal(
     (await manager('/manager/reviews/RV-DEMO', 'PATCH', { status: 'Rejected' }))
       .status,
@@ -433,12 +483,116 @@ test('only delivered purchases can be reviewed and moderation controls publicati
   );
 });
 
+test('a rating without a comment is published directly and skips moderation', async (t) => {
+  const { manager, customer, guest, deliveredPurchase } = await fixture(t);
+  for (let i = 0; i < 3; i++) await deliveredPurchase('TK-002');
+  const before = (await guest('/state')).body.state.products.find(
+    (p) => p.id === 'TK-002',
+  ).publishedRating;
+  for (const comment of [undefined, '', '   ']) {
+    assert.equal(
+      (
+        await customer('/reviews', 'POST', {
+          productId: 'TK-002',
+          rating: 4,
+          comment,
+        })
+      ).status,
+      200,
+    );
+  }
+  const after = (await guest('/state')).body.state.products.find(
+    (p) => p.id === 'TK-002',
+  ).publishedRating;
+  assert.equal(after.count, before.count + 3);
+  const ratingOnly = (await manager('/state')).body.state.reviews.filter(
+    (r) => r.productId === 'TK-002' && r.comment === null,
+  );
+  assert.equal(ratingOnly.length, 3);
+  for (const review of ratingOnly) {
+    assert.equal(review.status, 'Approved');
+    // Nothing to moderate: the review is already final.
+    assert.equal(
+      (
+        await manager(`/manager/reviews/${review.id}`, 'PATCH', {
+          status: 'Rejected',
+        })
+      ).status,
+      409,
+    );
+  }
+  // A comment longer than the limit is still rejected.
+  assert.equal(
+    (
+      await customer('/reviews', 'POST', {
+        productId: 'TK-002',
+        rating: 4,
+        comment: 'x'.repeat(501),
+      })
+    ).status,
+    400,
+  );
+});
+
+test('a customer can review a product once per delivered purchase', async (t) => {
+  const { customer, deliveredPurchase } = await fixture(t);
+  const review = (rating, comment) =>
+    customer('/reviews', 'POST', { productId: 'TK-002', rating, comment });
+  // The seeded delivered order of TK-002 already has a review (RV-DEMO).
+  const used = await review(4);
+  assert.equal(used.status, 409);
+  assert.match(used.body.error, /already reviewed/);
+  // A second delivered purchase allows exactly one more review, with or
+  // without a comment.
+  await deliveredPurchase('TK-002', 2);
+  assert.equal((await review(5, 'Bought it again')).status, 200);
+  assert.equal((await review(3)).status, 409);
+  // Quantity does not matter: two units in one order are one purchase.
+  await deliveredPurchase('TK-002');
+  assert.equal((await review(4)).status, 200);
+  assert.equal((await review(4)).status, 409);
+});
+
+test('undelivered and cancelled purchases do not allow another review', async (t) => {
+  const { customer, manager } = await fixture(t);
+  const buy = async () =>
+    (
+      await customer('/orders', 'POST', {
+        ...checkout,
+        key: randomUUID(),
+        items: [{ id: 'TK-002', qty: 1 }],
+      })
+    ).body.data;
+  const review = () =>
+    customer('/reviews', 'POST', { productId: 'TK-002', rating: 4 });
+  const processing = await buy();
+  assert.equal((await review()).status, 409);
+  await manager(`/manager/orders/${processing}/status`, 'PATCH', {
+    status: 'In transit',
+  });
+  assert.equal((await review()).status, 409);
+  const cancelled = await buy();
+  await customer(`/orders/${cancelled}/cancel`, 'POST', {});
+  assert.equal((await review()).status, 409);
+});
+
+test('two reviews sent at once cannot both use the same purchase', async (t) => {
+  const { customer, deliveredPurchase } = await fixture(t);
+  await deliveredPurchase('TK-002');
+  const results = await Promise.all(
+    [1, 2, 3].map((rating) =>
+      customer('/reviews', 'POST', { productId: 'TK-002', rating }),
+    ),
+  );
+  assert.deepEqual(results.map((r) => r.status).sort(), [200, 409, 409]);
+});
+
 test('state persists after reconnecting to the database and passwords are hashed', async (t) => {
   const { db, url } = await freshDb(t);
   await db.query(
     "UPDATE products SET stock_quantity = 7 WHERE code = 'TK-001'",
   );
-  await db.query("INSERT INTO categories (name) VALUES ('Watches')");
+  await db.query("INSERT INTO categories (name) VALUES ('Anklets')");
   const { rows } = await db.query(
     "SELECT password_hash FROM users WHERE email = 'deniz@example.com'",
   );
@@ -453,7 +607,7 @@ test('state persists after reconnecting to the database and passwords are hashed
     );
     assert.equal(stock.rows[0].stock_quantity, 7);
     const watches = await reopened.query(
-      "SELECT 1 FROM categories WHERE name = 'Watches'",
+      "SELECT 1 FROM categories WHERE name = 'Anklets'",
     );
     assert.equal(watches.rowCount, 1);
   } finally {

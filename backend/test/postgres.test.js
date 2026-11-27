@@ -105,13 +105,13 @@ test('seeding twice does not duplicate demo data', async (t) => {
   const { db } = await freshDb(t);
   assert.equal(await seedDemoData(db), false);
   const { rows } = await db.query('SELECT count(*)::int AS n FROM users');
-  assert.equal(rows[0].n, 2);
+  assert.equal(rows[0].n, 3);
 });
 
 test('rows inserted without the new store columns get safe defaults (DB team seeds stay valid)', async (t) => {
   const { db } = await freshDb(t, { seed: false });
   const { rows } = await db.query(
-    `WITH c AS (INSERT INTO categories (name) VALUES ('Watches') RETURNING id)
+    `WITH c AS (INSERT INTO categories (name) VALUES ('Anklets') RETURNING id)
      INSERT INTO products (category_id, name, model, serial_number, description,
        stock_quantity, price, warranty_status, distributor)
      SELECT id, 'Classic Leather Watch', 'WTC-LTH-01', 'TKS-WTC-0001', 'Quartz',
@@ -301,10 +301,12 @@ test('a deleted category with archived products keeps their history and can be r
     email: 'manager@takistir.local',
     password: 'ManagerDemo!24',
   });
-  assert.equal(
-    (await manager('/manager/products/TK-003', 'DELETE')).status,
-    200,
-  );
+  // A category can be removed only after all of its products are removed.
+  for (const id of ['TK-003', 'TK-005', 'TK-006', 'TK-007', 'TK-008'])
+    assert.equal(
+      (await manager(`/manager/products/${id}`, 'DELETE')).status,
+      200,
+    );
   assert.equal(
     (await manager('/manager/categories/Rings', 'DELETE')).status,
     200,

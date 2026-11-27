@@ -36,7 +36,7 @@ export function StoreProvider({ children }) {
         ),
     ),
   );
-  const [wishlist, setWishlist] = useState(() =>
+  const [guestWishlist, setWishlist] = useState(() =>
     readSaved(
       'wishlist',
       [],
@@ -49,6 +49,8 @@ export function StoreProvider({ children }) {
   const allProducts = snapshot?.products || [];
   const products = allProducts.filter((p) => !p.archived);
   const user = snapshot?.user || null;
+  const wishlist =
+    user?.role === 'customer' ? snapshot?.wishlist || [] : guestWishlist;
 
   function apply(state) {
     setSnapshot((current) =>
@@ -105,12 +107,12 @@ export function StoreProvider({ children }) {
       localStorage.setItem('takistir-preview:cart', JSON.stringify(cart));
       localStorage.setItem(
         'takistir-preview:wishlist',
-        JSON.stringify(wishlist),
+        JSON.stringify(guestWishlist),
       );
     } catch {
       /* Storage is optional. */
     }
-  }, [cart, wishlist]);
+  }, [cart, guestWishlist]);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(''), 4000);
@@ -220,7 +222,9 @@ export function StoreProvider({ children }) {
         '/reviews',
         'POST',
         { productId, rating, comment },
-        'Your rating and comment are awaiting approval.',
+        comment.trim()
+          ? 'Your rating is published. Your comment is awaiting approval.'
+          : 'Your rating is published.',
       )
     ).error;
   }
@@ -291,6 +295,20 @@ export function StoreProvider({ children }) {
     setCart((items) => items.map((i) => (i.id === id ? { ...i, qty } : i)));
   }
   function toggleWishlist(id) {
+    if (user?.role === 'customer') {
+      return mutate(
+        `/wishlist/items/${encodeURIComponent(id)}`,
+        wishlist.includes(id) ? 'DELETE' : 'PUT',
+        undefined,
+        wishlist.includes(id)
+          ? 'Removed from wishlist.'
+          : 'Saved. Discount demo notifications are enabled for this product.',
+      );
+    }
+    if (user) {
+      setToast('Sign in as a customer to save products.');
+      return;
+    }
     setWishlist((items) =>
       items.includes(id) ? items.filter((item) => item !== id) : [...items, id],
     );
@@ -343,6 +361,16 @@ export function StoreProvider({ children }) {
     <StoreContext.Provider
       value={{
         products,
+        revision: snapshot?.revision,
+        notifications: snapshot?.notifications || [],
+        markNotificationRead: (id) =>
+          mutate(
+            `/notifications/${encodeURIComponent(id)}/read`,
+            'PATCH',
+            {},
+            'Notification marked as read.',
+          ),
+        salesAction: mutate,
         allProducts,
         categories: snapshot?.categories || [],
         orders: snapshot?.orders || [],
