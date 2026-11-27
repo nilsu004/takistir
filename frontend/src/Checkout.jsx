@@ -160,6 +160,7 @@ export function Checkout({ step }) {
               type="tel"
               autoComplete="tel"
               defaultValue={address?.phone || ''}
+              maxLength={40}
               required
             />
             <Button type="submit">Continue to payment</Button>

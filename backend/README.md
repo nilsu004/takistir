@@ -29,9 +29,20 @@ Use **My account → Local test accounts** or enter these credentials. Use an in
 
 ### Schema
 
+Mock payment records and the SCRUM-58 storage contract are documented in
+[mock-payment-storage.md](../docs/mock-payment-storage.md).
+
+Invoice snapshots and the SCRUM-61 email worker storage contract are documented in
+[invoice-storage.md](../docs/invoice-storage.md).
+
 `001` (Mahmut) creates `categories` and `products` and is unchanged. `003` adds the store fields the API needs: a public product `code` (such as `TK-001`; the integer `id` stays the internal key), image, material, collection, popularity, imported rating, an `archived` flag, case-insensitive unique category names, and a nullable `price` because sales managers set prices (requirement 11). Rows inserted without these columns get defaults, so plain catalogue seeds keep working. `004` adds `users`, `sessions`, `orders`, `order_items`, `return_requests`, `return_request_items` and `reviews`. Order items copy the product name, image and paid unit price at purchase time. Number `002` is left for the search-index migration on `SCRUM-45-search-queries`.
 
 Deleting a product or category archives it, because past orders still reference them. Re-adding an archived category name restores it.
+
+`010` adds the optional `orders.delivery_phone` field for the number provided at checkout. It is stored on the order and returned as `deliveryPhone` in order data visible to the owning customer and Product Manager. Orders placed without a phone number omit the field.
+
+Migration 010 follows payment/invoice migrations 008–009 from PR #19. Review and
+merge PR #19 before the delivery-phone PR #17.
 
 ## API
 
