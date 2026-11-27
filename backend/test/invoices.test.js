@@ -212,7 +212,7 @@ test('checkout rollback removes the invoice and email queue with the order', asy
 test('migration captures existing accessory orders without queuing historical emails', async (t) => {
   const { db } = await freshDb(t, { migrate: false, seed: false });
   const dir = new URL('../db/migrations/', import.meta.url);
-  const migration = '008_create_invoice_records.sql';
+  const migration = '009_create_invoice_records.sql';
   const files = readdirSync(dir)
     .filter((file) => /^\d{3}_.+\.sql$/.test(file))
     .sort();

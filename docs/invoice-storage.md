@@ -19,7 +19,7 @@ erDiagram
 | invoice_items  | (order_id, position) PK, unique product per invoice, product_code, product_name, product_image, positive quantity, nonnegative paid unit_price   |
 | invoice_emails | order_id PK/FK, constrained status, nonnegative attempt_count, claim_token, lease_until, sent_at, updated_at                                     |
 
-Migration 008 captures existing orders using their stored purchase items and the
+Migration 009 captures existing orders using their stored purchase items and the
 customer profile available at upgrade time. It queues emails only for new
 checkouts. Local accessory demo orders also receive snapshots, with email
 queuing disabled. Invoice numbers follow the existing screen's TK-F format. Repeated
