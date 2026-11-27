@@ -31,6 +31,16 @@ if (!connectionString) {
 }
 
 const db = createDb(connectionString);
+const { rows: encoding } = await db.query(
+  'SELECT pg_encoding_to_char(encoding) AS enc FROM pg_database WHERE datname = current_database()',
+);
+if (encoding[0].enc !== 'UTF8')
+  console.warn(
+    `Warning: database encoding is ${encoding[0].enc}, not UTF8. Text limits count bytes and Turkish characters may break. ` +
+      (localPostgres
+        ? 'Stop the API, delete backend/data/postgres and start again to recreate it as UTF8.'
+        : "Create the database with ENCODING 'UTF8'."),
+  );
 const applied = await migrate(db);
 if (applied.length) console.log(`Applied migrations: ${applied.join(', ')}`);
 // Demo accounts have publicly known passwords, so they are never created in

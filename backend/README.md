@@ -12,7 +12,7 @@ The API always uses PostgreSQL. It picks the server like this:
 | `DATABASE_URL` is not set | A private PostgreSQL 17 started by the `embedded-postgres` dev dependency, stored in `backend/data/postgres` (no Docker needed) |
 | `NODE_ENV=production`     | `DATABASE_URL` is required; demo accounts are never created                                                                     |
 
-Set `DATABASE_URL` in `backend/.env` (see `.env.example`) or the shell. `LOCAL_PG_DIR` changes the embedded data folder. To start again from demo data, stop the API and delete `backend/data/postgres` (or empty the Docker database). The data folder is ignored by Git.
+Set `DATABASE_URL` in `backend/.env` (see `.env.example`) or the shell. `LOCAL_PG_DIR` changes the embedded data folder. The built-in server and every database it creates use UTF8 (the startup log warns if a database is not UTF8; a `backend/data/postgres` folder created before this fix is SQL_ASCII and should be deleted once). To start again from demo data, stop the API and delete `backend/data/postgres` (or empty the Docker database). The data folder is ignored by Git.
 
 On startup the API:
 

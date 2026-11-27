@@ -322,3 +322,22 @@ test('a deleted category with archived products keeps their history and can be r
   state = (await manager('/state')).body.state;
   assert(state.categories.includes('rings'));
 });
+
+test('test databases are UTF8 and text limits count characters, not bytes', async (t) => {
+  const { db } = await freshDb(t, { seed: false });
+  const { rows } = await db.query(
+    'SELECT pg_encoding_to_char(encoding) AS enc FROM pg_database WHERE datname = current_database()',
+  );
+  assert.equal(rows[0].enc, 'UTF8');
+  // 160 Turkish characters fill users.name (VARCHAR(160)) exactly; under
+  // SQL_ASCII they would count as 320 bytes and be rejected.
+  await db.query(
+    `INSERT INTO users (id, name, email, role, password_hash)
+     VALUES ('UTF-1', $1, 'utf@example.com', 'customer', 'x:y')`,
+    ['Ş'.repeat(160)],
+  );
+  const stored = await db.query(
+    "SELECT length(name) AS chars FROM users WHERE id = 'UTF-1'",
+  );
+  assert.equal(stored.rows[0].chars, 160);
+});

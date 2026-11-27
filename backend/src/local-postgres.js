@@ -11,6 +11,13 @@ import { randomBytes } from 'node:crypto';
  * persistentDir: keep data between runs (dev server); omit for a throwaway
  * cluster that is deleted on stop (tests).
  */
+/**
+ * CREATE DATABASE that is UTF8 regardless of the server's default encoding
+ * (template0 is required to choose an encoding different from template1).
+ */
+export const CREATE_UTF8_DATABASE = (name) =>
+  `CREATE DATABASE ${name} ENCODING 'UTF8' TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C'`;
+
 export async function startLocalPostgres({ persistentDir, port } = {}) {
   let EmbeddedPostgres;
   try {
@@ -33,6 +40,9 @@ export async function startLocalPostgres({ persistentDir, port } = {}) {
     password,
     port,
     persistent: Boolean(persistentDir),
+    // UTF8 like Docker/managed PostgreSQL. initdb's default here is SQL_ASCII,
+    // which counts VARCHAR limits in bytes and mishandles Turkish characters.
+    initdbFlags: ['--encoding=UTF8', '--locale=C'],
     onLog: () => {},
     onError: () => {},
   });
@@ -48,7 +58,7 @@ export async function startLocalPostgres({ persistentDir, port } = {}) {
     const exists = await admin.query(
       "SELECT 1 FROM pg_database WHERE datname = 'takistir'",
     );
-    if (!exists.rowCount) await admin.query('CREATE DATABASE takistir');
+    if (!exists.rowCount) await admin.query(CREATE_UTF8_DATABASE('takistir'));
     await admin.end();
   }
   return { url, stop: () => server.stop() };
