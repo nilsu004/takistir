@@ -41,6 +41,9 @@ Deleting a product or category archives it, because past orders still reference 
 
 `010` adds the optional `orders.delivery_phone` field for the number provided at checkout. It is stored on the order and returned as `deliveryPhone` in order data visible to the owning customer and Product Manager. Orders placed without a phone number omit the field.
 
+Migration 010 follows payment/invoice migrations 008–009 from PR #19. Review and
+merge PR #19 before the delivery-phone PR #17.
+
 ## API
 
 All state-changing requests require JSON and `X-Takistir-Request: 1`. Same-origin browser requests go through Vite; no cross-origin CORS access is enabled. Local frontend origins on ports 5173 and 5174 are accepted. Sessions use random opaque HttpOnly/SameSite=Strict cookies, SHA-256 token hashes in the `sessions` table, an eight-hour expiry and server-side logout invalidation. Passwords use salted scrypt hashes. The server assigns roles; self-registration can create only customers.
