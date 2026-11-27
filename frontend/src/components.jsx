@@ -21,7 +21,7 @@ export function Button({
 }
 
 export function Header() {
-  const { cart, user, categories } = useStore();
+  const { cart, user, categories, notifications } = useStore();
   const [search, setSearch] = useState('');
   const count = cart.reduce((sum, item) => sum + item.qty, 0);
   return (
@@ -55,6 +55,14 @@ export function Header() {
           </a>
           {user?.role === 'product-manager' && (
             <a href="#/product-manager">Management panel</a>
+          )}
+          {user?.role === 'sales-manager' && (
+            <a href="#/sales-manager">Sales panel</a>
+          )}
+          {user?.role === 'customer' && (
+            <a href="#/notifications">
+              Notifications ({notifications.filter((n) => !n.readAt).length})
+            </a>
           )}
           <a href="#/wishlist">♡ Wishlist</a>
           <a href="#/cart">Cart ({count})</a>
@@ -128,7 +136,15 @@ export function ProductCard({ product }) {
         <a href={`#/product/${product.id}`}>{product.name}</a>
       </h3>
       <div className="card-price">
-        {money(product.price)}{' '}
+        <span>
+          {product.originalPrice != null && (
+            <>
+              <del className="muted">{money(product.originalPrice)}</del>{' '}
+            </>
+          )}
+          {money(product.price)}
+          {product.discount > 0 && <small> · {product.discount}% off</small>}
+        </span>{' '}
         <button
           className="heart"
           aria-label={`${saved ? 'Remove' : 'Save'} ${product.name} ${saved ? 'from' : 'to'} wishlist`}

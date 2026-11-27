@@ -22,17 +22,34 @@ export const demoAccounts = [
     role: 'product-manager',
     password: 'ManagerDemo!24',
   },
+  {
+    id: 'SM-001',
+    name: 'Sales Manager',
+    email: 'sales@takistir.local',
+    home: '',
+    taxId: '',
+    role: 'sales-manager',
+    password: 'SalesDemo!24',
+  },
 ];
 
 /**
  * Loads the storefront demo catalogue, accounts, orders and reviews into an
  * empty database (the same data the former SQLite adapter created).
- * Does nothing when any user already exists. Returns true if it seeded.
+ * Preserves existing data and backfills a missing Sales Manager demo account.
+ * Returns true only when the complete initial fixture was seeded.
  */
 export async function seedDemoData(db) {
   return db.tx(async (c) => {
     await c.query('LOCK TABLE users IN EXCLUSIVE MODE');
-    if ((await c.query('SELECT 1 FROM users LIMIT 1')).rowCount) return false;
+    if ((await c.query('SELECT 1 FROM users LIMIT 1')).rowCount) {
+      const u = demoAccounts.find((u) => u.role === 'sales-manager');
+      await c.query(
+        `INSERT INTO users(id,name,email,role,password_hash) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`,
+        [u.id, u.name, u.email, u.role, passwordHash(u.password)],
+      );
+      return false;
+    }
 
     const categoryIds = new Map();
     for (const name of initialCategories) {
@@ -50,9 +67,9 @@ export async function seedDemoData(db) {
       const { rows } = await c.query(
         `INSERT INTO products (code, category_id, name, model, serial_number,
            description, stock_quantity, price, warranty_status, distributor,
-           material, image, detail_image, collection, popularity,
+           material, image, detail_image, collection, popularity, list_price,
            seed_rating, seed_rating_count)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
          RETURNING id`,
         [
           p.id,
@@ -63,13 +80,14 @@ export async function seedDemoData(db) {
           p.description,
           p.stock,
           p.price,
-          '2 years',
-          'Takıştır',
+          p.warranty ?? '2 years',
+          p.distributor ?? 'Takıştır',
           p.material,
           p.image,
           p.detailImage ?? null,
           p.collection,
           p.popularity,
+          p.price,
           p.rating,
           p.popularity,
         ],
