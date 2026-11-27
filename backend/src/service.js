@@ -530,12 +530,17 @@ export async function cancelOrder(c, user, id) {
 }
 export async function submitReview(c, user, body) {
   customer(user);
+  // One review per delivered purchase: a customer who bought the product in
+  // three delivered orders may review it three times (team decision,
+  // SCRUM-69). The orders are locked so two reviews sent at the same time
+  // cannot both use the same purchase.
   const delivered = await c.query(
-    `SELECT 1 FROM orders o
+    `SELECT o.id FROM orders o
      JOIN order_items i ON i.order_id = o.id
      JOIN products p ON p.id = i.product_id
      WHERE o.customer_id = $1 AND o.status = 'Delivered' AND p.code = $2
-     LIMIT 1`,
+     ORDER BY o.id
+     FOR UPDATE OF o`,
     [user.id, typeof body.productId === 'string' ? body.productId : ''],
   );
   if (!delivered.rowCount)
@@ -547,16 +552,31 @@ export async function submitReview(c, user, body) {
   if (!rows.length) fail(404, 'Product not found.');
   if (!Number.isInteger(body.rating) || body.rating < 1 || body.rating > 5)
     fail(400, 'Rating must be between 1 and 5.');
+  // The comment is optional: a rating alone is published directly, while a
+  // comment waits for product manager approval (requirement 5).
+  const hasComment =
+    typeof body.comment === 'string' && body.comment.trim() !== '';
+  const comment = hasComment ? text(body.comment, 'Comment', 500) : null;
+  const { rows: used } = await c.query(
+    'SELECT count(*)::int AS n FROM reviews WHERE customer_id = $1 AND product_id = $2',
+    [user.id, rows[0].id],
+  );
+  if (used[0].n >= delivered.rowCount)
+    fail(
+      409,
+      'You have already reviewed each delivered purchase of this product.',
+    );
   await c.query(
-    `INSERT INTO reviews (id, product_id, customer_id, author_name, rating, comment)
-     VALUES ($1,$2,$3,$4,$5,$6)`,
+    `INSERT INTO reviews (id, product_id, customer_id, author_name, rating, comment, status)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
     [
       randomUUID(),
       rows[0].id,
       user.id,
       user.name,
       body.rating,
-      text(body.comment, 'Comment', 500),
+      comment,
+      hasComment ? 'Pending' : 'Approved',
     ],
   );
 }

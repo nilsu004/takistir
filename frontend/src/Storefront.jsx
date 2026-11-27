@@ -294,8 +294,8 @@ export function Product({ id }) {
               </select>
             </label>
             <label className="field">
-              Comment
-              <textarea name="comment" required maxLength={500} />
+              Comment (optional)
+              <textarea name="comment" maxLength={500} />
             </label>
             {reviewError && <Notice error>{reviewError}</Notice>}
             <Button type="submit">Submit review</Button>
@@ -312,7 +312,9 @@ export function Product({ id }) {
             </thead>
             <tbody>
               {ownReviews
-                .filter((review) => review.status === 'Approved')
+                .filter(
+                  (review) => review.status === 'Approved' && review.comment,
+                )
                 .map((review) => (
                   <tr key={review.id}>
                     <td
@@ -329,7 +331,9 @@ export function Product({ id }) {
                     </td>
                   </tr>
                 ))}
-              {!ownReviews.some((review) => review.status === 'Approved') && (
+              {!ownReviews.some(
+                (review) => review.status === 'Approved' && review.comment,
+              ) && (
                 <tr>
                   <td colSpan={3}>No published comments yet.</td>
                 </tr>
