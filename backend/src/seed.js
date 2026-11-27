@@ -89,7 +89,7 @@ export async function seedDemoData(db) {
           p.popularity,
           p.price,
           p.rating,
-          p.popularity,
+          p.ratingCount,
         ],
       );
       productIds.set(p.id, rows[0].id);

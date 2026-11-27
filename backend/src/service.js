@@ -59,7 +59,8 @@ function productFromRow(r) {
     stock: r.stock_quantity,
     rating: r.seed_rating,
     ratingCount: r.seed_rating_count,
-    popularity: r.popularity,
+    // products.popularity is the imported starting value; sales add to it.
+    popularity: r.popularity + (r.units_sold ?? 0),
     collection: r.collection,
     model: r.model,
     serial: r.serial_number,
@@ -169,10 +170,18 @@ export async function view(c, user) {
   const { rows: productRows } = await c.query(
     `SELECT p.*, c.name AS category,
        COALESCE(r.rating_count, 0)::int AS live_rating_count,
-       COALESCE(r.rating_sum, 0)::int AS live_rating_sum
+       COALESCE(r.rating_sum, 0)::int AS live_rating_sum,
+       COALESCE(s.units_sold, 0)::int AS units_sold
      FROM products p JOIN categories c ON c.id = p.category_id
      LEFT JOIN (SELECT product_id, count(*) AS rating_count, sum(rating) AS rating_sum
                 FROM reviews GROUP BY product_id) r ON r.product_id = p.id
+     -- Units sold in this store (SCRUM-45 decision): cancelled orders do not
+     -- count, returned items still do. Imported demo orders are already part
+     -- of the seeded popularity, so only orders placed here are added.
+     LEFT JOIN (SELECT i.product_id, sum(i.quantity) AS units_sold
+                FROM order_items i JOIN orders o ON o.id = i.order_id
+                WHERE o.status <> 'Cancelled' AND o.inventory_reserved
+                GROUP BY i.product_id) s ON s.product_id = p.id
      WHERE NOT p.archived OR $1 OR p.code = ANY($2)
      ORDER BY p.id`,
     [isManager || isSales, historicalIds],
