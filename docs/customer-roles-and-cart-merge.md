@@ -48,8 +48,9 @@ Fresh databases receive all four roles. Existing development databases receive
 only missing demo accounts; no existing password, role, profile, catalogue,
 orders or stock is reset. A conflicting account ID or email is skipped rather
 than changing that account's role. These are public local test credentials,
-not a production provisioning flow. Sales/support workflows remain separate
-tasks; their ability to authenticate does not implement those features.
+not a production provisioning flow. Sales operations use the existing
+[Sales Manager workspace](sales-manager.md). Support Agent workflows are tracked
+separately.
 
 The existing customer and Product Manager buttons still work. To try a new role,
 enter its credentials into the login form. Restart the development API to run
@@ -100,3 +101,7 @@ PostgreSQL startup was blocked by the execution sandbox's shared-memory policy.
 Run `npm run check` on the team's PostgreSQL environment before merge. The WASM
 fixture serializes transactions and cannot establish native multi-session
 locking/deadlock behavior.
+
+Updated against main on 27 November 2026. All 96 selected regression tests passed
+through the temporary PGlite fixture, with the native TCP reconnection test
+excluded. The frontend build and formatting checks passed.
