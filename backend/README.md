@@ -33,7 +33,7 @@ Use **My account → Local test accounts** or enter these credentials. Use an in
 
 Deleting a product or category archives it, because past orders still reference them. Re-adding an archived category name restores it.
 
-`006` adds the optional `orders.delivery_phone` field for the number provided at checkout. It is stored on the order and returned as `deliveryPhone` in order data visible to the owning customer and Product Manager. Orders placed without a phone number omit the field.
+`010` adds the optional `orders.delivery_phone` field for the number provided at checkout. It is stored on the order and returned as `deliveryPhone` in order data visible to the owning customer and Product Manager. Orders placed without a phone number omit the field.
 
 ## API
 
