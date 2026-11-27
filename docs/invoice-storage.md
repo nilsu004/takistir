@@ -25,6 +25,9 @@ checkouts. Local accessory demo orders also receive snapshots, with email
 queuing disabled. Invoice numbers follow the existing screen's TK-F format. Repeated
 `storeInvoice(c, orderId)` calls preserve an existing snapshot.
 
+Migration 008 creates mock payment records and 009 creates these invoice tables.
+SCRUM-54's delivery-phone migration follows as 010. Merge PR #19 before PR #17.
+
 ## SCRUM-61 integration
 
 PDF generation and email sending use the internal functions in
@@ -70,3 +73,7 @@ allocation on this machine. Native multi-session validation and the team's
 The wider PGlite regression run passed 91 tests, followed by a successful frontend
 build and formatting check. The native reconnection test was excluded because
 the fixture provides an in-process database instead of a TCP PostgreSQL server.
+
+Updated against main on 27 November 2026. All 101 selected regression tests passed
+through the temporary PGlite fixture, followed by frontend build and formatting.
+The native TCP reconnection test remains excluded from that fixture run.
