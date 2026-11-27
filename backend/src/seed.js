@@ -1,6 +1,7 @@
 import { products, initialOrders } from '../../shared/seed.js';
 import { initialCategories } from '../../shared/catalog-rules.js';
 import { passwordHash } from './passwords.js';
+import { storeInvoice } from './invoices.js';
 
 // Local development/test accounts. Never seeded in production.
 export const demoAccounts = [
@@ -178,6 +179,13 @@ export async function seedDemoData(db) {
          VALUES ($1,$2,$3,$4,$5,$6,$7)`,
         [id, productIds.get(code), customerId, author, rating, comment, status],
       );
+    // Older upgrade fixtures can seed before the invoice migration is applied.
+    if (
+      (await c.query("SELECT to_regclass('public.invoices') AS table_name"))
+        .rows[0].table_name
+    )
+      for (const order of initialOrders)
+        await storeInvoice(c, order.id, { queueEmail: false });
     return true;
   });
 }

@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { recordMockPayment } from './mock-payments.js';
+import { loadInvoice, storeInvoice } from './invoices.js';
 import { returnEligible } from '../../shared/order-rules.js';
 import { canTransition, validateProduct } from '../../shared/catalog-rules.js';
 
@@ -76,8 +78,12 @@ function productFromRow(r) {
 /** Orders with their items and return requests, in the API's shape. */
 async function loadOrders(c, whereSql, params) {
   const { rows: orders } = await c.query(
-    `SELECT o.*, u.name AS customer_name, u.email AS customer_email, r.id AS return_id, r.status AS return_status, r.amount AS return_amount, r.rejection_reason, r.received_at
-     FROM orders o JOIN users u ON u.id=o.customer_id LEFT JOIN return_requests r ON r.order_id = o.id
+    `SELECT o.*, COALESCE(v.customer_name, u.name) AS customer_name,
+       COALESCE(v.customer_email, u.email) AS customer_email,
+       r.id AS return_id, r.status AS return_status, r.amount AS return_amount, r.rejection_reason, r.received_at
+     FROM orders o JOIN users u ON u.id=o.customer_id
+     LEFT JOIN invoices v ON v.order_id = o.id
+     LEFT JOIN return_requests r ON r.order_id = o.id
      WHERE ${whereSql} ORDER BY o.seq DESC`,
     params,
   );
@@ -420,7 +426,9 @@ export async function orderFor(c, user, id, { lock = false } = {}) {
 }
 export async function invoiceFor(c, user, id) {
   await orderFor(c, user, id);
-  return (await loadOrders(c, 'o.id = $1', [id]))[0];
+  const order = (await loadOrders(c, 'o.id = $1', [id]))[0];
+  const invoice = await loadInvoice(c, id);
+  return { ...order, ...invoice };
 }
 
 async function existingCheckout(c, user, key) {
@@ -519,6 +527,14 @@ export async function placeOrder(c, user, body) {
         item.cost,
       ],
     );
+  await recordMockPayment(c, {
+    customerId: user.id,
+    checkoutKey: key,
+    attemptKey: `order:${id}`,
+    outcome: 'succeeded',
+    orderId: id,
+  });
+  await storeInvoice(c, id);
   return id;
 }
 export async function cancelOrder(c, user, id) {
